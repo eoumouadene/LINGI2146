@@ -76,7 +76,23 @@ add_to_routing_table(int node_addr[2], int next[2])
 }
 
 // set struct msg
-
+static void
+set_packet(struct msg *new_msg, int type, int rank, int addr[2], int value, char msg[64])
+{
+	packetbuf_clear();
+	packetbuf_set_datalen(sizeof(struct msg));
+	new_msg = packetbuf_dataptr();
+	memset(new_msg, 0, sizeof(struct msg));
+	new_msg->sender_type = type;
+	new_msg->sender_rank = rank;
+	new_msg->origin_addr[0] = addr[0];
+	new_msg->origin_addr[1] = addr[1];
+	new_msg->sender_data_value = value;
+	int i ;
+	for (i=0 ; i < sizeof(msg) ; i++){
+		new_msg->sender_data[i] = msg[i] ;
+	}
+}
 //
 
 /*---------------------------------------------------------------------------*/
@@ -231,7 +247,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
   PROCESS_BEGIN();
 
   broadcast_open(&broadcast, 129, &broadcast_call);
-  static struct msg *new_msg;
+  static struct msg new_msg;
 
   while(1) {
 
@@ -247,58 +263,33 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
             
 	    etimer_set(&et, CLOCK_SECOND * 2 + random_rand() % (CLOCK_SECOND * 5));
     	    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-
-	    packetbuf_clear();
-	    packetbuf_set_datalen(sizeof(struct msg));
-	    new_msg = packetbuf_dataptr();
-	    memset(new_msg, 0, sizeof(struct msg));
-	    new_msg->sender_type = 1;
-	    new_msg->sender_rank = rank;
+		
 	    char real_message[64];
-	    int type = 1;
-	    sprintf(real_message,"Type:%d,Rank:%d,Data: Hello From Node",type,rank);
-	    int i ;
-	    for (i=0 ; i < sizeof(real_message) ; i++){
-		new_msg->sender_data[i] = real_message[i] ;
-	    }
+	    int new_addr[2];
+	    int new_value;
+	    sprintf(real_message,"Type:%d,Rank:%d,Data: Hello From Node",1,rank);
+	    set_packet(&new_msg, 1, rank, new_addr, new_value, real_message);
+	
 	    broadcast_send(&broadcast);
 	}
 	else if(strcmp(data,"Out") == 0){ // parent out
 	    etimer_set(&et, CLOCK_SECOND * 1 + random_rand() % (CLOCK_SECOND * 5));
     	    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 	    
-	    packetbuf_clear();
-	    packetbuf_set_datalen(sizeof(struct msg));
-	    new_msg = packetbuf_dataptr();
-	    memset(new_msg, 0, sizeof(struct msg));
-	    new_msg->sender_type = 0;
-	    new_msg->sender_rank = rank;
 	    char real_message[64];
-	    int type = 1;
+	    int new_addr[2];
+	    int new_value;
 	    sprintf(real_message,"I'm Out guys");
-	    int i ;
-	    for (i=0 ; i < sizeof(real_message) ; i++){
-		new_msg->sender_data[i] = real_message[i] ;
-	    }
+	    set_packet(&new_msg, 0, rank, new_addr, new_value, real_message);
+
 	    broadcast_send(&broadcast);
 	}
 	else if(strcmp(data,"SeekNode") == 0){ // Down Search for node with broadcast
 	    etimer_set(&et, CLOCK_SECOND * 1 + random_rand() % (CLOCK_SECOND * 3));
     	    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 	    
-	    packetbuf_clear();
-	    packetbuf_set_datalen(sizeof(struct msg));
-	    new_msg = packetbuf_dataptr();
-	    memset(new_msg, 0, sizeof(struct msg));
-	    new_msg->sender_type = 4;
-	    new_msg->sender_rank = rank;
-	    new_msg->origin_addr[0] = broadcast_received_msg.origin_addr[0];
-	    new_msg->origin_addr[1] = broadcast_received_msg.origin_addr[1];
-	    new_msg->sender_data_value = broadcast_received_msg.sender_data_value;
-	    int i ;
-	    for (i=0 ; i < sizeof(broadcast_received_msg.sender_data) ; i++){
-		new_msg->sender_data[i] = broadcast_received_msg.sender_data[i] ;
-	    }
+	    set_packet(&new_msg, 4, rank, broadcast_received_msg.origin_addr, broadcast_received_msg.sender_data_value, broadcast_received_msg.sender_data);
+
 	    broadcast_send(&broadcast);
 	}
   }
@@ -316,7 +307,7 @@ PROCESS_THREAD(test_runicast_process, ev, data)
   static struct etimer et1;
   static struct etimer et2;
   static linkaddr_t recv;
-  static struct msg *new_msg;
+  static struct msg new_msg;
 
   while(1) {
 
@@ -342,24 +333,14 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 		etimer_set(&et2, CLOCK_SECOND * 60);
 		etimer_set(&et1, CLOCK_SECOND * 100 + random_rand() % (CLOCK_SECOND * 100)); // little tests from time to time (seems useless now)
 	if(!runicast_is_transmitting(&runicast)) { // data up sending
-		packetbuf_clear();
-		packetbuf_set_datalen(sizeof(struct msg));
-		new_msg = packetbuf_dataptr();
-		memset(new_msg, 0, sizeof(struct msg));
-		new_msg->sender_type = 2;
-		new_msg->sender_rank = rank;
-		new_msg->origin_addr[0] = linkaddr_node_addr.u8[0];
-		new_msg->origin_addr[1] = linkaddr_node_addr.u8[1];
 		char real_message[64];
-		new_msg->sender_data_value = (int) data_generate();
-		sprintf(real_message,"Data sent by %d.%d : %d\n",linkaddr_node_addr.u8[0],linkaddr_node_addr.u8[1],new_msg->sender_data_value);
-		int i ;
-		for (i=0 ; i < sizeof(real_message) ; i++){
-		new_msg->sender_data[i] = real_message[i] ;
-		}
+		int new_value = (int) data_generate();
+		sprintf(real_message,"Data sent by %d.%d : %d\n",linkaddr_node_addr.u8[0],linkaddr_node_addr.u8[1],new_value);
+		set_packet(&new_msg, 2, rank, (int *) linkaddr_node_addr.u8, new_value, real_message);
+
 		recv.u8[0] = parent[0];
 		recv.u8[1] = parent[1];
-
+		
 		printf("Sending Data For Computation !\n");
 		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
 		
@@ -367,19 +348,11 @@ PROCESS_THREAD(test_runicast_process, ev, data)
     }
     else if (etimer_expired(&et1)){ // runicast test when adding parent
 	if(!runicast_is_transmitting(&runicast)) {
-		packetbuf_clear();
-		packetbuf_set_datalen(sizeof(struct msg));
-		new_msg = packetbuf_dataptr();
-		memset(new_msg, 0, sizeof(struct msg));
-		new_msg->sender_type = 1;
-		new_msg->sender_rank = rank;
 		char real_message[64];
-		int type = 1;
-		sprintf(real_message,"Type:%d,Rank:%d,Data: Hello Parent",type,rank);
-		int i ;
-		for (i=0 ; i < sizeof(real_message) ; i++){
-		new_msg->sender_data[i] = real_message[i] ;
-		}
+		int new_value = (int) data_generate();
+		sprintf(real_message,"Type:%d,Rank:%d,Data: Hello Parent",1,rank);
+		set_packet(&new_msg, 1, rank,  (int *) linkaddr_node_addr.u8, new_value, real_message);
+
 		recv.u8[0] = parent[0];
 		recv.u8[1] = parent[1];
 		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
@@ -389,20 +362,8 @@ PROCESS_THREAD(test_runicast_process, ev, data)
     else if (strcmp(data,"DataUp") == 0){ // data up to computation
 
 	if(!runicast_is_transmitting(&runicast)) {
-		packetbuf_clear();
-		packetbuf_set_datalen(sizeof(struct msg));
-		new_msg = packetbuf_dataptr();
-		memset(new_msg, 0, sizeof(struct msg));
-		new_msg->sender_type = 2;
-		new_msg->sender_rank = runicast_received_msg.sender_rank - 1;
-		new_msg->origin_addr[0] = runicast_received_msg.origin_addr[0];
-		new_msg->origin_addr[1] = runicast_received_msg.origin_addr[1];
-		char real_message[64];
-		new_msg->sender_data_value = runicast_received_msg.sender_data_value;
-		int i ;
-		for (i=0 ; i < sizeof(runicast_received_msg.sender_data) ; i++){
-		new_msg->sender_data[i] = runicast_received_msg.sender_data[i] ;
-		}
+		set_packet(&new_msg, 2, runicast_received_msg.sender_rank - 1, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, runicast_received_msg.sender_data);
+
 		recv.u8[0] = parent[0];
 		recv.u8[1] = parent[1];
 		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
@@ -412,46 +373,22 @@ PROCESS_THREAD(test_runicast_process, ev, data)
     else if (strcmp(data,"DataUpForBroadcast") == 0){ // runicast failed so ask root for general broadcast
 
 	if(!runicast_is_transmitting(&runicast)) {
-		packetbuf_clear();
-		packetbuf_set_datalen(sizeof(struct msg));
-		new_msg = packetbuf_dataptr();
-		memset(new_msg, 0, sizeof(struct msg));
-		new_msg->sender_type = 5;
-		new_msg->sender_rank = rank;
-		new_msg->origin_addr[0] = runicast_received_msg.origin_addr[0]; //current target useful ?
-		new_msg->origin_addr[1] = runicast_received_msg.origin_addr[1];
-		char real_message[64];
-		new_msg->sender_data_value = runicast_received_msg.sender_data_value;
-		int i ;
-		for (i=0 ; i < sizeof(runicast_received_msg.sender_data) ; i++){
-			new_msg->sender_data[i] = runicast_received_msg.sender_data[i] ;
-		}
+		set_packet(&new_msg, 5, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, runicast_received_msg.sender_data);
+
 		recv.u8[0] = parent[0];
 		recv.u8[1] = parent[1];
-		//printf("GOAL IS %d.%d\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1]);
-		//printf("rank %d: sending for broadcast data runicast to address %u.%u\n",rank,recv.u8[0],recv.u8[1]);
+
 		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
 
 	}
     }
     else if (strcmp(data,"RunicastSeekNode") == 0){ // down search for node with runicast
 	if(!runicast_is_transmitting(&runicast)) {
-		packetbuf_clear();
-		packetbuf_set_datalen(sizeof(struct msg));
-		new_msg = packetbuf_dataptr();
-		memset(new_msg, 0, sizeof(struct msg));
-		new_msg->sender_type = 3;
-		new_msg->sender_rank = rank;
-		new_msg->origin_addr[0] = runicast_received_msg.origin_addr[0];
-		new_msg->origin_addr[1] = runicast_received_msg.origin_addr[1];
-		char real_message[64];
-		new_msg->sender_data_value = runicast_received_msg.sender_data_value;
-		int i ;
-		for (i=0 ; i < sizeof(runicast_received_msg.sender_data) ; i++){
-		new_msg->sender_data[i] = runicast_received_msg.sender_data[i] ;
-		}
+		
+		set_packet(&new_msg, 3, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, runicast_received_msg.sender_data);
 
 		int is_in_table = 0;
+		int i;
 		for (i = 0 ; i < route_table_len ; i++){
 			if ( route_table[i].TTL != 0 && route_table[i].addr_to_find[0] == runicast_received_msg.origin_addr[0] && route_table[i].addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
 				recv.u8[0] = route_table[i].next_node[0];

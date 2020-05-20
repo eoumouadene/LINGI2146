@@ -104,7 +104,6 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
   	memcpy(&runicast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
   	printf("rank : %d runicast message of type %d received from %d.%d: rank '%d'\n",
          rank, runicast_received_msg.sender_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
-	//process_post(&test_runicast_process, PROCESS_EVENT_MSG, "Got Something");
 
 	if( runicast_received_msg.sender_type == 2 ){
 		printf("Got Data From %d.%d : value : %d!\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1],runicast_received_msg.sender_data_value);
@@ -130,7 +129,6 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		process_post(&test_runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
 	}
 	else if(runicast_received_msg.sender_type == 5){
-		//memcpy(&current_target, &runicast_received_msg, sizeof(struct msg));
 		process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // if Runicast failed
 	}	
 
@@ -153,6 +151,8 @@ static const struct runicast_callbacks runicast_callbacks = {recv_runicast,
 							     timedout_runicast};
 static struct runicast_conn runicast;
 /*---------------------------------------------------------------------------*/
+//	PROCESSES
+/*---------------------------------------------------------------------------*/
 PROCESS_THREAD(example_broadcast_process, ev, data)
 {
   static struct etimer et;
@@ -168,7 +168,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
   while(1) {
     
     /* Delay ... seconds */
-    etimer_set(&et, CLOCK_SECOND * 30 + random_rand() % (CLOCK_SECOND * 20));
+    etimer_set(&et, CLOCK_SECOND * 40 + random_rand() % (CLOCK_SECOND * 20));
 
     PROCESS_WAIT_EVENT();
 
@@ -185,7 +185,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
 
 	else if(strcmp(data,"OpenValveBroadcast") == 0){ // data down by broadcast
             
-	    etimer_set(&et, CLOCK_SECOND * 1 + random_rand() % (CLOCK_SECOND * 5));
+	    etimer_set(&et, CLOCK_SECOND * 5 + random_rand() % (CLOCK_SECOND * 10));
     	    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
 	    char real_message[64];
@@ -208,7 +208,7 @@ PROCESS_THREAD(test_runicast_process, ev, data)
   PROCESS_BEGIN();
 
   runicast_open(&runicast, 144, &runicast_callbacks);
-  static struct etimer et;
+  static struct etimer et2;
   linkaddr_t recv;
   struct msg new_msg;
 
@@ -218,14 +218,14 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 	if(strcmp(data,"Got Something") == 0){
 
 	}
-	else if (etimer_expired(&et)){
+	else if (etimer_expired(&et2)){
 		  int i;
 		  for (i = 0 ; i < route_table_len ; i++){
 			if(route_table[i].TTL > 0){
 				route_table[i].TTL = route_table[i].TTL - 1;
 			}
 		  }
-		  etimer_set(&et, CLOCK_SECOND * 60);
+		  etimer_set(&et2, CLOCK_SECOND * 60);
 	}
 	else if (strcmp(data,"OpenValveRunicast") == 0){
 		if(!runicast_is_transmitting(&runicast)) {
@@ -237,7 +237,6 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 			int i;
 			for (i = 0 ; i < route_table_len ; i++){
 				if ( route_table[i].TTL != 0 && route_table[i].addr_to_find[0] == runicast_received_msg.origin_addr[0] && route_table[i].addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
-					//printf("CAN GO DOWN\n");
 					recv.u8[0] = route_table[i].next_node[0];
 					recv.u8[1] = route_table[i].next_node[1];
 					is_in_table = 1;
@@ -251,7 +250,7 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 			else{
 				printf("rank %d: sending data runicast to address %u.%u\n",rank,recv.u8[0],recv.u8[1]);
 				runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
-				etimer_set(&et, CLOCK_SECOND * 60); // TTL --
+				etimer_set(&et2, CLOCK_SECOND * 60); // TTL --
 			}
 		}
 	}

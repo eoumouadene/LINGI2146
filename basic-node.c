@@ -93,7 +93,6 @@ set_packet(struct msg *new_msg, int type, int rank, int addr[2], int value, char
 		new_msg->sender_data[i] = msg[i] ;
 	}
 }
-//
 
 /*---------------------------------------------------------------------------*/
 //	BROADCAST
@@ -164,7 +163,6 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
          rank, runicast_received_msg.sender_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 
 	if ( runicast_received_msg.sender_type == 2 ){ // routing_table
-		//printf("WAS HERE \n");
 		int from_addr[2];
 		from_addr[0] = from->u8[0];
 		from_addr[1] = from->u8[1];
@@ -189,7 +187,6 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
 	}
 	else if ( runicast_received_msg.sender_type == 3 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
-		  //memcpy(&current_target, &runicast_received_msg, sizeof(struct msg)); // case of timeout or broadcast retransmit
 		  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "RunicastSeekNode");
 	}
 	else if ( runicast_received_msg.sender_type == 5 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
@@ -197,7 +194,6 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
 	}
 	else if ( runicast_received_msg.sender_type == 5 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
-		  //memcpy(&current_target, &runicast_received_msg, sizeof(struct msg)); // case of timeout or broadcast retransmit
 		  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
 	}
 }
@@ -205,7 +201,7 @@ static void
 sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
 {
   printf("runicast message sent to %d.%d, retransmissions %d\n",
- 	 to->u8[0], to->u8[1], retransmissions); // add back after debugging
+ 	 to->u8[0], to->u8[1], retransmissions);
 }
 static void
 timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
@@ -214,7 +210,6 @@ timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retrans
 	 to->u8[0], to->u8[1], retransmissions);
 
   if (to->u8[0] != parent[0] && to->u8[0] != parent[1]){
-	  //printf("target addr is %d.%d\n",current_target.origin_addr[0],current_target.origin_addr[1]);
 	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
   }
   else {
@@ -252,7 +247,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
   while(1) {
 
     /* Delay ... seconds */
-    etimer_set(&et, CLOCK_SECOND * 10 + random_rand() % (CLOCK_SECOND * 10));
+    etimer_set(&et, CLOCK_SECOND * 30 + random_rand() % (CLOCK_SECOND * 30));
 
     PROCESS_WAIT_EVENT();
 
@@ -261,7 +256,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
 	}
 	else if(strcmp(data,"Go") == 0){ // start broadcast
             
-	    etimer_set(&et, CLOCK_SECOND * 2 + random_rand() % (CLOCK_SECOND * 5));
+	    etimer_set(&et, CLOCK_SECOND * 2 + random_rand() % (CLOCK_SECOND * 8));
     	    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 		
 	    char real_message[64];
@@ -285,7 +280,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
 	    broadcast_send(&broadcast);
 	}
 	else if(strcmp(data,"SeekNode") == 0){ // Down Search for node with broadcast
-	    etimer_set(&et, CLOCK_SECOND * 1 + random_rand() % (CLOCK_SECOND * 3));
+	    etimer_set(&et, CLOCK_SECOND * 2 + random_rand() % (CLOCK_SECOND * 8));
     	    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 	    
 	    set_packet(&new_msg, 4, rank, broadcast_received_msg.origin_addr, broadcast_received_msg.sender_data_value, broadcast_received_msg.sender_data);
@@ -314,50 +309,11 @@ PROCESS_THREAD(test_runicast_process, ev, data)
     PROCESS_WAIT_EVENT();
 
     if(strcmp(data,"Go2") == 0){
-	etimer_set(&et1, CLOCK_SECOND * 10 + random_rand() % (CLOCK_SECOND * 40)); // avoid transmitting at the same time (collisions) and can ajust parent based on signal strenght (> retrans broadcast);
-	etimer_set(&et2, CLOCK_SECOND * 60);
+	etimer_set(&et1, CLOCK_SECOND * 10 + random_rand() % (CLOCK_SECOND * 45)); // avoid transmitting at the same time (collisions) and can ajust parent based on signal strenght (> retrans broadcast);
     }
     else if (strcmp(data,"TimerOut") == 0){ // time out , stop data runicast up
 		etimer_stop(&et1);
 		etimer_stop(&et2);
-    }
-    else if (etimer_expired(&et2)){ // et2 first because et1 still expired
-
-		  int i;
-		  for (i = 0 ; i < route_table_len ; i++){ // TTL decreased
-			if(route_table[i].TTL > 0){
-				route_table[i].TTL = route_table[i].TTL - 1;
-			}
-		  }
-		
-		etimer_set(&et2, CLOCK_SECOND * 60);
-		etimer_set(&et1, CLOCK_SECOND * 100 + random_rand() % (CLOCK_SECOND * 100)); // little tests from time to time (seems useless now)
-	if(!runicast_is_transmitting(&runicast)) { // data up sending
-		char real_message[64];
-		int new_value = (int) data_generate();
-		sprintf(real_message,"Data sent by %d.%d : %d\n",linkaddr_node_addr.u8[0],linkaddr_node_addr.u8[1],new_value);
-		set_packet(&new_msg, 2, rank, (int *) linkaddr_node_addr.u8, new_value, real_message);
-
-		recv.u8[0] = parent[0];
-		recv.u8[1] = parent[1];
-		
-		printf("Sending Data For Computation !\n");
-		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
-		
-	}
-    }
-    else if (etimer_expired(&et1)){ // runicast test when adding parent
-	if(!runicast_is_transmitting(&runicast)) {
-		char real_message[64];
-		int new_value = (int) data_generate();
-		sprintf(real_message,"Type:%d,Rank:%d,Data: Hello Parent",1,rank);
-		set_packet(&new_msg, 1, rank,  (int *) linkaddr_node_addr.u8, new_value, real_message);
-
-		recv.u8[0] = parent[0];
-		recv.u8[1] = parent[1];
-		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
-		
-	}
     }
     else if (strcmp(data,"DataUp") == 0){ // data up to computation
 
@@ -407,6 +363,44 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 
 	}	
     }
+    else if (etimer_expired(&et2)){ // et2 first because et1 still expired
+
+		  int i;
+		  for (i = 0 ; i < route_table_len ; i++){ // TTL decreased
+			if(route_table[i].TTL > 0){
+				route_table[i].TTL = route_table[i].TTL - 1;
+			}
+		  }
+		
+		etimer_set(&et2, CLOCK_SECOND * 60);
+		etimer_set(&et1, CLOCK_SECOND * 6000); // little tests from time to time (seems useless now but avoid et1 expirating for ever)
+	if(!runicast_is_transmitting(&runicast)) { // data up sending
+		char real_message[64];
+		int new_value = (int) data_generate();
+		sprintf(real_message,"Data sent by %d.%d : %d\n",linkaddr_node_addr.u8[0],linkaddr_node_addr.u8[1],new_value);
+		set_packet(&new_msg, 2, rank, (int *) linkaddr_node_addr.u8, new_value, real_message);
+
+		recv.u8[0] = parent[0];
+		recv.u8[1] = parent[1];
+		
+		printf("Sending Data For Computation !\n");
+		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
+		
+	}
+    }
+    else if (etimer_expired(&et1)){ // runicast test when adding parent
+	if(!runicast_is_transmitting(&runicast)) {
+		char real_message[64];
+		int new_value = (int) data_generate();
+		sprintf(real_message,"Type:%d,Rank:%d,Data: Hello Parent",1,rank);
+		set_packet(&new_msg, 1, rank,  (int *) linkaddr_node_addr.u8, new_value, real_message);
+
+		recv.u8[0] = parent[0];
+		recv.u8[1] = parent[1];
+		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
+		etimer_set(&et2, CLOCK_SECOND * 60);
+	}
+    }					// timers in last to avoid overwriting received packets
   }
 
   PROCESS_END();

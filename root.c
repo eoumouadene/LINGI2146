@@ -7,11 +7,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "dev/serial-line.h"
+
 #define MAX_RETRANSMISSIONS 3
 /*---------------------------------------------------------------------------*/
 PROCESS(broadcast_process, "Broadcast example");
 PROCESS(runicast_process, "runicast test");
-AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
+PROCESS(test_serial, "Serial line test process");
+AUTOSTART_PROCESSES(&broadcast_process,&runicast_process,&test_serial);
 /*---------------------------------------------------------------------------*/
 static int parent[2];
 static int rank = 1;
@@ -259,3 +262,16 @@ PROCESS_THREAD(runicast_process, ev, data)
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
+PROCESS_THREAD(test_serial, ev, data)
+ {
+   PROCESS_BEGIN();
+ 
+   for(;;) {
+     PROCESS_YIELD();
+     if(ev == serial_line_event_message) {
+       printf("received line: %s\n", (char *)data);
+     }
+   }
+   PROCESS_END();
+ }
+

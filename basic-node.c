@@ -20,12 +20,7 @@ static int routing_table[100][3]; // addr to join / next node / TTL
 static int rank = 999;
 static int parent_RSSI = -999;
 
-<<<<<<< HEAD
 static int last_temp = 10;
-=======
-//new
-static int last_temp = 10
->>>>>>> 61dd1837d3973f8d8eadce273e5a7ae4ac5d3521
 
 struct msg {
   int sender_type; // sender msg type : 0 : node down ; 1 : discovery ; 2 : up (data) for runicast ; 3 : down (action to do) / 4 : down broadcast ; 5 up (data) for broadcast (if runicast timed out) ;

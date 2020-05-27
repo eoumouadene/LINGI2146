@@ -48,8 +48,8 @@ static struct msg broadcast_received_msg;
 static struct msg runicast_received_msg;
 
 static struct msg current_target;
-/*
-static unsigned int
+
+static int
 data_generate()
 {
   int offset;
@@ -65,21 +65,6 @@ data_generate()
   last_temp = last_temp + offset;
    return last_temp;
 }
-*/
-static int
-data_generate()
-{
-  int offset = (random_rand() % 5) - 2;
-  if (last_temp >= 30 ) {
-	offset = (random_rand() % 5) - 4;
-  }
-  if (last_temp <= -6 ) {
-	  offset = random_rand() % 5;
-  }
-  last_temp = last_temp + offset;
-  return last_temp;
-}
-
 
 static void
 add_to_routing_table(int node_addr[2], int next[2])

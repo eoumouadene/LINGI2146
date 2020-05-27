@@ -127,7 +127,7 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		// send answer if needed
 		process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
 	}
-	else if(runicast_received_msg.msg_type == 5){
+	else if(runicast_received_msg.msg_type == 4){
 		process_post(&broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // if Runicast failed
 	}	
 
@@ -189,7 +189,7 @@ PROCESS_THREAD(broadcast_process, ev, data)
 
 	    char real_message[64];
 	    sprintf(real_message,"Open Valve for Node : %d.%d\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1]);
-	    set_packet(&new_msg, 4, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, real_message);
+	    set_packet(&new_msg, 5, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, real_message);
 
 	    broadcast_send(&broadcast);
 	}

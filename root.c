@@ -127,6 +127,8 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 			add_to_routing_table(runicast_received_msg.origin_addr,from_addr);
 		}
 		// do calculation
+		printf("@:%d:%d:%d:@\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1],runicast_received_msg.sender_data_value);
+
 		// send answer if needed
 		process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
 	}
@@ -269,7 +271,7 @@ PROCESS_THREAD(test_serial, ev, data)
    for(;;) {
      PROCESS_YIELD();
      if(ev == serial_line_event_message) {
-       printf("received line: %s\n", (char *)data);
+		printf("received line: %s\n", (char *)data);
      }
    }
    PROCESS_END();

@@ -13,11 +13,11 @@ PROCESS(broadcast_process, "Broadcast example");
 PROCESS(runicast_process, "runicast test");
 AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
 /*---------------------------------------------------------------------------*/
-static int parent[2];
+
 static int rank = 1;
 
 struct msg {
-  int sender_type; // sender msg type : 1 : discovery ; 2 : up (data) ; 3 : down (action to do)
+  int msg_type; // sender msg type : 1 : discovery ; 2 : up (data) ; 3 : down (action to do)
   int sender_rank; // sender_rank
   int origin_addr[2]; // origin address
   int sender_data_value; // data value
@@ -68,7 +68,7 @@ set_packet(struct msg *new_msg, int type, int rank, int addr[2], int value, char
 	packetbuf_set_datalen(sizeof(struct msg));
 	new_msg = packetbuf_dataptr();
 	memset(new_msg, 0, sizeof(struct msg));
-	new_msg->sender_type = type;
+	new_msg->msg_type = type;
 	new_msg->sender_rank = rank;
 	new_msg->origin_addr[0] = addr[0];
 	new_msg->origin_addr[1] = addr[1];
@@ -90,7 +90,7 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 {
   memcpy(&broadcast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
   printf("rank : %d broadcast message of type %d received from %d.%d: rank '%d'\n",
-         rank, runicast_received_msg.sender_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
+         rank, runicast_received_msg.msg_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 }
 static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
 static struct broadcast_conn broadcast;
@@ -102,9 +102,9 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 {
   	memcpy(&runicast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
   	printf("rank : %d runicast message of type %d received from %d.%d: rank '%d'\n",
-         rank, runicast_received_msg.sender_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
+         rank, runicast_received_msg.msg_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 
-	if( runicast_received_msg.sender_type == 2 ){
+	if( runicast_received_msg.msg_type == 2 ){
 		printf("Got Data From %d.%d : value : %d!\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1],runicast_received_msg.sender_data_value);
 		int from_addr[2];
 		from_addr[0] = from->u8[0];
@@ -127,7 +127,7 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		// send answer if needed
 		process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
 	}
-	else if(runicast_received_msg.sender_type == 5){
+	else if(runicast_received_msg.msg_type == 5){
 		process_post(&broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // if Runicast failed
 	}	
 

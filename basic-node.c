@@ -16,14 +16,13 @@ PROCESS(runicast_process, "runicast test");
 AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
 /*---------------------------------------------------------------------------*/
 static int parent[2];
-static int routing_table[100][3]; // addr to join / next node / TTL
 static int rank = 999;
 static int parent_RSSI = -999;
 
 static int last_temp = 10;
 
 struct msg {
-  int sender_type; // sender msg type : 0 : node down ; 1 : discovery ; 2 : up (data) for runicast ; 3 : down (action to do) / 4 : down broadcast ; 5 up (data) for broadcast (if runicast timed out) ;
+  int msg_type; // sender msg type : 0 : node down ; 1 : discovery ; 2 : up (data) for runicast ; 3 : down (action to do) / 4 : down broadcast ; 5 up (data) for broadcast (if runicast timed out) ;
   int sender_rank; // sender_rank
   int origin_addr[2]; // origin address
   int sender_data_value; // data value
@@ -42,9 +41,7 @@ static int route_table_len = sizeof(route_table)/sizeof(route_table[0]);
 static struct msg broadcast_received_msg;
 static struct msg runicast_received_msg;
 
-static struct msg current_target;
-
-static int
+static unsigned int
 data_generate()
 {
   int offset;
@@ -96,7 +93,7 @@ set_packet(struct msg *new_msg, int type, int rank, int addr[2], int value, char
 	packetbuf_set_datalen(sizeof(struct msg));
 	new_msg = packetbuf_dataptr();
 	memset(new_msg, 0, sizeof(struct msg));
-	new_msg->sender_type = type;
+	new_msg->msg_type = type;
 	new_msg->sender_rank = rank;
 	new_msg->origin_addr[0] = addr[0];
 	new_msg->origin_addr[1] = addr[1];
@@ -115,9 +112,9 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 {
   memcpy(&broadcast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
   printf("rank : %d broadcast message of type %d received from %d.%d: rank '%d'\n",
-         rank, broadcast_received_msg.sender_type, from->u8[0], from->u8[1], broadcast_received_msg.sender_rank);
+         rank, broadcast_received_msg.msg_type, from->u8[0], from->u8[1], broadcast_received_msg.sender_rank);
 
-  if( broadcast_received_msg.sender_type == 1 && broadcast_received_msg.sender_rank < rank ){
+  if( broadcast_received_msg.msg_type == 1 && broadcast_received_msg.sender_rank < rank ){
 	if( broadcast_received_msg.sender_rank < rank-1 ) {
 		parent[0] = from->u8[0];
   		parent[1] = from->u8[1];
@@ -139,7 +136,7 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 		}
 	}
   } 
-  else if ( broadcast_received_msg.sender_type == 0 && parent[0] == from->u8[0] && parent[1] == from->u8[1] ){
+  else if ( broadcast_received_msg.msg_type == 0 && parent[0] == from->u8[0] && parent[1] == from->u8[1] ){
 	  printf("Reset Rank/Parent/RSSI\n");
 	  rank = 999;
 	  parent[0] = 0;
@@ -152,12 +149,12 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 			route_table[i].TTL = 0;
 	  }
   }
-  else if ( broadcast_received_msg.sender_type == 4 && broadcast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && broadcast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
+  else if ( broadcast_received_msg.msg_type == 4 && broadcast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && broadcast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 	  // Open valve
 	  printf("Open Valve Here, data was : %d\n",broadcast_received_msg.sender_data_value);
 	  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
   }
-  else if ( broadcast_received_msg.sender_type == 4 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){
+  else if ( broadcast_received_msg.msg_type == 4 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){
 		printf("SEARCHING FOR %d.%d\n",broadcast_received_msg.origin_addr[0],broadcast_received_msg.origin_addr[1]);		
 		process_post(&broadcast_process, PROCESS_EVENT_MSG, "SeekNode");
   }
@@ -174,9 +171,9 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 {
   	memcpy(&runicast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
   	printf("rank : %d runicast message of type %d received from %d.%d: rank '%d'\n",
-         rank, runicast_received_msg.sender_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
+         rank, runicast_received_msg.msg_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 
-	if ( runicast_received_msg.sender_type == 2 ){ // routing_table
+	if ( runicast_received_msg.msg_type == 2 ){ // routing_table
 		int from_addr[2];
 		from_addr[0] = from->u8[0];
 		from_addr[1] = from->u8[1];
@@ -196,20 +193,20 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		}
 		process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUp");	
 	}
-	else if ( runicast_received_msg.sender_type == 3 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
+	else if ( runicast_received_msg.msg_type == 3 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 		  // Open valve
 		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
 		  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
 	}
-	else if ( runicast_received_msg.sender_type == 3 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
+	else if ( runicast_received_msg.msg_type == 3 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
 		  process_post(&runicast_process, PROCESS_EVENT_MSG, "RunicastSeekNode");
 	}
-	else if ( runicast_received_msg.sender_type == 5 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
+	else if ( runicast_received_msg.msg_type == 5 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 		  // Open valve
 		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
 		  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
 	}
-	else if ( runicast_received_msg.sender_type == 5 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
+	else if ( runicast_received_msg.msg_type == 5 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
 		  process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
 	}
 }

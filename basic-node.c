@@ -20,7 +20,12 @@ static int routing_table[100][3]; // addr to join / next node / TTL
 static int rank = 999;
 static int parent_RSSI = -999;
 
+<<<<<<< HEAD
 static int last_temp = 10;
+=======
+//new
+static int last_temp = 10
+>>>>>>> 61dd1837d3973f8d8eadce273e5a7ae4ac5d3521
 
 struct msg {
   int sender_type; // sender msg type : 0 : node down ; 1 : discovery ; 2 : up (data) for runicast ; 3 : down (action to do) / 4 : down broadcast ; 5 up (data) for broadcast (if runicast timed out) ;
@@ -43,7 +48,7 @@ static struct msg broadcast_received_msg;
 static struct msg runicast_received_msg;
 
 static struct msg current_target;
-
+/*
 static unsigned int
 data_generate()
 {
@@ -60,6 +65,21 @@ data_generate()
   last_temp = last_temp + offset;
    return last_temp;
 }
+*/
+static int
+data_generate()
+{
+  int offset = (random_rand() % 5) - 2;
+  if (last_temp >= 30 ) {
+	offset = (random_rand() % 5) - 4;
+  }
+  if (last_temp <= -6 ) {
+	  offset = random_rand() % 5;
+  }
+  last_temp = last_temp + offset;
+  return last_temp;
+}
+
 
 static void
 add_to_routing_table(int node_addr[2], int next[2])

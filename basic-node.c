@@ -11,14 +11,16 @@
 
 #define MAX_RETRANSMISSIONS 3
 /*---------------------------------------------------------------------------*/
-PROCESS(example_broadcast_process, "Broadcast example");
-PROCESS(test_runicast_process, "runicast test");
-AUTOSTART_PROCESSES(&example_broadcast_process,&test_runicast_process);
+PROCESS(broadcast_process, "Broadcast example");
+PROCESS(runicast_process, "runicast test");
+AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
 /*---------------------------------------------------------------------------*/
 static int parent[2];
 static int routing_table[100][3]; // addr to join / next node / TTL
 static int rank = 999;
 static int parent_RSSI = -999;
+
+static int last_temp = 10;
 
 struct msg {
   int sender_type; // sender msg type : 0 : node down ; 1 : discovery ; 2 : up (data) for runicast ; 3 : down (action to do) / 4 : down broadcast ; 5 up (data) for broadcast (if runicast timed out) ;
@@ -45,7 +47,18 @@ static struct msg current_target;
 static unsigned int
 data_generate()
 {
-  return (int) (random_rand() % 40); // to fix
+  int offset;
+  if ( last_temp >= 30 ){
+	offset = (random_rand() % 5) - 4;
+  }
+  if ( last_temp <= -6 ){
+	offset = random_rand() % 5;
+  }
+  else {
+	offset = (random_rand() % 5) - 2;
+  }
+  last_temp = last_temp + offset;
+   return last_temp;
 }
 
 static void
@@ -110,19 +123,19 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
   		parent[1] = from->u8[1];
 		parent_RSSI = cc2420_last_rssi;
 		rank = broadcast_received_msg.sender_rank + 1;
-		process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Go");
-		process_post(&test_runicast_process, PROCESS_EVENT_MSG, "Go2");	
+		process_post(&broadcast_process, PROCESS_EVENT_MSG, "Go");
+		process_post(&runicast_process, PROCESS_EVENT_MSG, "Go2");	
 	}
 	else if ( broadcast_received_msg.sender_rank == rank-1){
 		if ( (parent[0] != from->u8[0] || parent[1] != from->u8[1]) && parent_RSSI <= cc2420_last_rssi ){
 			parent[0] = from->u8[0];
 		  	parent[1] = from->u8[1];
 			parent_RSSI = cc2420_last_rssi;
-			process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Go");
-			process_post(&test_runicast_process, PROCESS_EVENT_MSG, "Go2");
+			process_post(&broadcast_process, PROCESS_EVENT_MSG, "Go");
+			process_post(&runicast_process, PROCESS_EVENT_MSG, "Go2");
 		}
 		else if (parent[0] == from->u8[0] && parent[1] == from->u8[1]){
-			process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Go");
+			process_post(&broadcast_process, PROCESS_EVENT_MSG, "Go");
 		}
 	}
   } 
@@ -132,8 +145,8 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 	  parent[0] = 0;
 	  parent[1] = 0;
 	  parent_RSSI = -999;
-	  process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Out");
-	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "TimerOut");
+	  process_post(&broadcast_process, PROCESS_EVENT_MSG, "Out");
+	  process_post(&runicast_process, PROCESS_EVENT_MSG, "TimerOut");
 	  int i;
 	  for (i = 0 ; i < route_table_len ; i++){
 			route_table[i].TTL = 0;
@@ -142,10 +155,11 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
   else if ( broadcast_received_msg.sender_type == 4 && broadcast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && broadcast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 	  // Open valve
 	  printf("Open Valve Here, data was : %d\n",broadcast_received_msg.sender_data_value);
+	  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
   }
   else if ( broadcast_received_msg.sender_type == 4 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){
 		printf("SEARCHING FOR %d.%d\n",broadcast_received_msg.origin_addr[0],broadcast_received_msg.origin_addr[1]);		
-		process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "SeekNode");
+		process_post(&broadcast_process, PROCESS_EVENT_MSG, "SeekNode");
   }
   
 }
@@ -180,21 +194,23 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		if(is_in_table == 0){
 			add_to_routing_table(runicast_received_msg.origin_addr,from_addr);
 		}
-		process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUp");	
+		process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUp");	
 	}
 	else if ( runicast_received_msg.sender_type == 3 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 		  // Open valve
 		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
+		  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
 	}
 	else if ( runicast_received_msg.sender_type == 3 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
-		  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "RunicastSeekNode");
+		  process_post(&runicast_process, PROCESS_EVENT_MSG, "RunicastSeekNode");
 	}
 	else if ( runicast_received_msg.sender_type == 5 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 		  // Open valve
 		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
+		  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
 	}
 	else if ( runicast_received_msg.sender_type == 5 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
-		  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+		  process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
 	}
 }
 static void
@@ -210,7 +226,7 @@ timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retrans
 	 to->u8[0], to->u8[1], retransmissions);
 
   if (to->u8[0] != parent[0] && to->u8[0] != parent[1]){
-	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+	  process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
   }
   else {
 	  printf("Reset Rank/Parent/RSSI\n");
@@ -218,8 +234,8 @@ timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retrans
 	  parent[0] = 0;
 	  parent[1] = 0;
 	  parent_RSSI = -999;
-	  process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Out");
-	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "TimerOut");
+	  process_post(&broadcast_process, PROCESS_EVENT_MSG, "Out");
+	  process_post(&runicast_process, PROCESS_EVENT_MSG, "TimerOut");
 	  int i;
 	  for (i = 0 ; i < route_table_len ; i++){
 			route_table[i].TTL = 0;
@@ -233,7 +249,7 @@ static struct runicast_conn runicast;
 /*---------------------------------------------------------------------------*/
 //	PROCESSES
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(example_broadcast_process, ev, data)
+PROCESS_THREAD(broadcast_process, ev, data)
 {
   static struct etimer et;
 
@@ -292,15 +308,17 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(test_runicast_process, ev, data)
+PROCESS_THREAD(runicast_process, ev, data)
 {
   PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
   PROCESS_BEGIN();
+  leds_off(LEDS_ALL);
 
   runicast_open(&runicast, 144, &runicast_callbacks);
   static struct etimer et1;
   static struct etimer et2;
+  static struct etimer et3; // LEDS
   static linkaddr_t recv;
   static struct msg new_msg;
 
@@ -355,13 +373,17 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 		}
 		if(is_in_table == 0){
 			printf("Node disapeared ?\n"); // rip -> general broadcast
-			process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+			process_post(&broadcast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
 		}
 		else{
 			runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
 		}
 
 	}	
+    }
+    else if (strcmp(data,"StartLED") == 0){
+	leds_on(LEDS_GREEN);
+	etimer_set(&et3, CLOCK_SECOND * 600); // 10 minutes timer
     }
     else if (etimer_expired(&et2)){ // et2 first because et1 still expired
 
@@ -401,8 +423,11 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 		etimer_set(&et2, CLOCK_SECOND * 60);
 	}
     }					// timers in last to avoid overwriting received packets
+    else if (etimer_expired(&et3)){ // Turn off LED after 10 min
+	leds_off(LEDS_GREEN);
+    }
   }
-
+  leds_off(LEDS_ALL);
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/

@@ -9,9 +9,9 @@
 
 #define MAX_RETRANSMISSIONS 3
 /*---------------------------------------------------------------------------*/
-PROCESS(example_broadcast_process, "Broadcast example");
-PROCESS(test_runicast_process, "runicast test");
-AUTOSTART_PROCESSES(&example_broadcast_process,&test_runicast_process);
+PROCESS(broadcast_process, "Broadcast example");
+PROCESS(runicast_process, "runicast test");
+AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
 /*---------------------------------------------------------------------------*/
 static int parent[2];
 static int rank = 1;
@@ -28,7 +28,6 @@ struct route {
   int TTL;
   int addr_to_find[2];
   int next_node[2];
-	//int data[30];
 };
 
 static struct route route_table[64]; // static = init to 0 for all value
@@ -126,10 +125,10 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		}
 		// do calculation
 		// send answer if needed
-		process_post(&test_runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+		process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
 	}
 	else if(runicast_received_msg.sender_type == 5){
-		process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // if Runicast failed
+		process_post(&broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // if Runicast failed
 	}	
 
 }
@@ -144,7 +143,7 @@ timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retrans
 {
   printf("runicast message timed out when sending to %d.%d, retransmissions %d\n",
 	 to->u8[0], to->u8[1], retransmissions);
-  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // only case where root time out for now (see with server what to do)
+  process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // only case where root time out for now (see with server what to do)
 }
 static const struct runicast_callbacks runicast_callbacks = {recv_runicast,
 							     sent_runicast,
@@ -153,7 +152,7 @@ static struct runicast_conn runicast;
 /*---------------------------------------------------------------------------*/
 //	PROCESSES
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(example_broadcast_process, ev, data)
+PROCESS_THREAD(broadcast_process, ev, data)
 {
   static struct etimer et;
 
@@ -201,7 +200,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
 }
 /*---------------------------------------------------------------------------*/
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(test_runicast_process, ev, data)
+PROCESS_THREAD(runicast_process, ev, data)
 {
   PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
@@ -245,7 +244,7 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 			}
 			if(is_in_table == 0){
 				printf("Node disapeared ?????\n"); // rip
-				process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast");
+				process_post(&broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast");
 			}
 			else{
 				printf("rank %d: sending data runicast to address %u.%u\n",rank,recv.u8[0],recv.u8[1]);

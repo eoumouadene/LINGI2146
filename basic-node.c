@@ -149,7 +149,7 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
   }
   else if ( broadcast_received_msg.msg_type == 5 && broadcast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && broadcast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 	  // Open valve
-	  printf("Open Valve Here, data was : %d\n",broadcast_received_msg.sender_data_value);
+	  printf("Open Valve Here\n",broadcast_received_msg.sender_data_value);
 	  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
   }
   else if ( broadcast_received_msg.msg_type == 5 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){
@@ -193,7 +193,7 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 	}
 	else if ( runicast_received_msg.msg_type == 3 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 		  // Open valve
-		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
+		  printf("Open Valve Here\n");
 		  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
 	}
 	else if ( runicast_received_msg.msg_type == 3 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
@@ -201,7 +201,7 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 	}
 	else if ( runicast_received_msg.msg_type == 4 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 		  // Open valve
-		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
+		  printf("Open Valve Here\n");
 		  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
 	}
 	else if ( runicast_received_msg.msg_type == 4 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){

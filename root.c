@@ -5,6 +5,7 @@
 #include "dev/leds.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "dev/serial-line.h"
@@ -33,7 +34,7 @@ struct route {
   int next_node[2];
 };
 
-static struct route route_table[64]; // static = init to 0 for all value
+static struct route route_table[64]; // static = init to 0 for all value // 64 as basic size but can be extended if needed
 static int route_table_len = sizeof(route_table)/sizeof(route_table[0]);
 
 static void
@@ -55,11 +56,12 @@ add_to_routing_table(int node_addr[2], int next[2])
 	}
   }
   if (has_place == 0){
-	printf("Warning : Route Table Full : Reset with new route as first element\n");
+	printf("Error : Routing Table Full ! (Add more computation nodes or extend routing table size)\n"); // should not happen
+	/*printf("Warning : Route Table Full : Reset with new route as first element\n"); // should not happen
 	route_table[0] = new_route;
 	for (i = 1 ; i < route_table_len ; i++){
 		route_table[i].TTL = 0;
-  	}
+  	}*/
   }
 }
 
@@ -92,7 +94,7 @@ static void
 broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 {
   memcpy(&broadcast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
-  printf("rank : %d broadcast message of type %d received from %d.%d: rank '%d'\n",
+  printf("Rank : %d broadcast message of type %d received from %d.%d: rank '%d'\n",
          rank, runicast_received_msg.msg_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 }
 static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
@@ -104,7 +106,7 @@ static void
 recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 {
   	memcpy(&runicast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
-  	printf("rank : %d runicast message of type %d received from %d.%d: rank '%d'\n",
+  	printf("Rank : %d runicast message of type %d received from %d.%d: rank '%d'\n",
          rank, runicast_received_msg.msg_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 
 	if( runicast_received_msg.msg_type == 2 ){
@@ -128,9 +130,7 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		}
 		// do calculation
 		printf("@:%d:%d:%d:@\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1],runicast_received_msg.sender_data_value);
-
 		// send answer if needed
-		//process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
 	}
 	else if(runicast_received_msg.msg_type == 4){
 		process_post(&broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // if Runicast failed
@@ -140,13 +140,12 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 static void
 sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
 {
-  printf("runicast message sent to %d.%d, retransmissions %d\n",
-	 to->u8[0], to->u8[1], retransmissions);
+  //printf("runicast message sent to %d.%d, retransmissions %d\n", to->u8[0], to->u8[1], retransmissions);
 }
 static void
 timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
 {
-  printf("runicast message timed out when sending to %d.%d, retransmissions %d\n",
+  printf("Runicast message timed out when sending to %d.%d, retransmissions %d\n",
 	 to->u8[0], to->u8[1], retransmissions);
   process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // only case where root time out for now (see with server what to do)
 }
@@ -180,9 +179,8 @@ PROCESS_THREAD(broadcast_process, ev, data)
 
 		char real_message[64];
 		int new_addr[2];
-		int new_value;
 		sprintf(real_message,"Type:1,Rank:01,Data: Hello From Root");
-		set_packet(&new_msg, 1, rank, new_addr, new_value, real_message);
+		set_packet(&new_msg, 1, rank, new_addr, 0, real_message);
 	    
 	    broadcast_send(&broadcast);
 	}
@@ -250,7 +248,6 @@ PROCESS_THREAD(runicast_process, ev, data)
 				process_post(&broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast");
 			}
 			else{
-				printf("rank %d: sending data runicast to address %u.%u\n",rank,recv.u8[0],recv.u8[1]);
 				runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
 			}
 		}

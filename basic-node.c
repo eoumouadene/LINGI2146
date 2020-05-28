@@ -75,11 +75,12 @@ add_to_routing_table(int node_addr[2], int next[2])
 	}
   }
   if (has_place == 0){
-	printf("Warning : Route Table Full : Reset with new route as first element\n"); // should not happen
+	printf("Error : Routing Table Full ! (Add more computation nodes or extend routing table size)\n"); // should not happen
+	/*printf("Warning : Route Table Full : Reset with new route as first element\n"); // should not happen
 	route_table[0] = new_route;
 	for (i = 1 ; i < route_table_len ; i++){
 		route_table[i].TTL = 0;
-  	}
+  	}*/
   }
 }
 
@@ -109,7 +110,7 @@ static void
 broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 {
   memcpy(&broadcast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
-  printf("rank : %d broadcast message of type %d received from %d.%d: rank '%d'\n",
+  printf("Rank : %d broadcast message of type %d received from %d.%d: rank '%d'\n",
          rank, broadcast_received_msg.msg_type, from->u8[0], from->u8[1], broadcast_received_msg.sender_rank);
 
   if( broadcast_received_msg.msg_type == 1 && broadcast_received_msg.sender_rank < rank ){
@@ -152,8 +153,7 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 	  printf("Open Valve Here\n");
 	  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
   }
-  else if ( broadcast_received_msg.msg_type == 5 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){
-		printf("SEARCHING FOR %d.%d\n",broadcast_received_msg.origin_addr[0],broadcast_received_msg.origin_addr[1]);		
+  else if ( broadcast_received_msg.msg_type == 5 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){		
 		process_post(&broadcast_process, PROCESS_EVENT_MSG, "SeekNode");
   }
   
@@ -168,7 +168,7 @@ static void
 recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 {
   	memcpy(&runicast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
-  	printf("rank : %d runicast message of type %d received from %d.%d: rank '%d'\n",
+  	printf("Rank : %d runicast message of type %d received from %d.%d: rank '%d'\n",
          rank, runicast_received_msg.msg_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 
 	if ( runicast_received_msg.msg_type == 2 ){ // routing_table
@@ -211,17 +211,16 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 static void
 sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
 {
-  printf("runicast message sent to %d.%d, retransmissions %d\n",
- 	 to->u8[0], to->u8[1], retransmissions);
+  //printf("runicast message sent to %d.%d, retransmissions %d\n", to->u8[0], to->u8[1], retransmissions);
 }
 static void
 timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
 {
-  printf("runicast message timed out when sending to %d.%d, retransmissions %d\n",
+  printf("Runicast message timed out when sending to %d.%d, retransmissions %d\n",
 	 to->u8[0], to->u8[1], retransmissions);
 
   if (to->u8[0] != parent[0] && to->u8[0] != parent[1]){
-	  process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+	  process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast"); // only case for failure of valve runicast message
   }
   else {
 	  printf("Reset Rank/Parent/RSSI\n");
@@ -257,13 +256,13 @@ PROCESS_THREAD(broadcast_process, ev, data)
 
   while(1) {
 
-    /* Delay ... seconds */
+    /* Delay 30 + 0..29 seconds */
     etimer_set(&et, CLOCK_SECOND * 30 + random_rand() % (CLOCK_SECOND * 30));
 
     PROCESS_WAIT_EVENT();
 
 	if(etimer_expired(&et)){
-		printf("My rank is %d\n", rank);
+		printf("My rank is %d\n", rank); // print its rank from time to time
 	}
 	else if(strcmp(data,"Go") == 0){ // start broadcast
             
@@ -272,9 +271,8 @@ PROCESS_THREAD(broadcast_process, ev, data)
 		
 	    char real_message[64];
 	    int new_addr[2];
-	    int new_value;
 	    sprintf(real_message,"Type:%d,Rank:%d,Data: Hello From Node",1,rank);
-	    set_packet(&new_msg, 1, rank, new_addr, new_value, real_message);
+	    set_packet(&new_msg, 1, rank, new_addr, 0, real_message);
 	
 	    broadcast_send(&broadcast);
 	}
@@ -284,9 +282,8 @@ PROCESS_THREAD(broadcast_process, ev, data)
 	    
 	    char real_message[64];
 	    int new_addr[2];
-	    int new_value;
 	    sprintf(real_message,"I'm Out guys");
-	    set_packet(&new_msg, 0, rank, new_addr, new_value, real_message);
+	    set_packet(&new_msg, 0, rank, new_addr, 0, real_message);
 
 	    broadcast_send(&broadcast);
 	}
@@ -367,7 +364,7 @@ PROCESS_THREAD(runicast_process, ev, data)
 			}
 		}
 		if(is_in_table == 0){
-			printf("Node disapeared ?\n"); // rip -> general broadcast
+			printf("Node disapeared ?\n"); // failure runicast down -> rip -> general broadcast
 			process_post(&broadcast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
 		}
 		else{
@@ -408,9 +405,8 @@ PROCESS_THREAD(runicast_process, ev, data)
     else if (etimer_expired(&et1)){ // runicast test when adding parent
 	if(!runicast_is_transmitting(&runicast)) {
 		char real_message[64];
-		int new_value = (int) data_generate();
 		sprintf(real_message,"Type:%d,Rank:%d,Data: Hello Parent",1,rank);
-		set_packet(&new_msg, 1, rank,  (int *) linkaddr_node_addr.u8, new_value, real_message);
+		set_packet(&new_msg, 1, rank,  (int *) linkaddr_node_addr.u8, 0, real_message); // parent will do nothing when receiving this packet
 
 		recv.u8[0] = parent[0];
 		recv.u8[1] = parent[1];

@@ -16,7 +16,7 @@ PROCESS(runicast_process, "runicast");
 PROCESS(test_serial, "Serial line test process");
 AUTOSTART_PROCESSES(&broadcast_process,&runicast_process,&test_serial);
 /*---------------------------------------------------------------------------*/
-
+static int valve_addr[2];
 static int rank = 1;
 
 struct msg {
@@ -130,7 +130,7 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		printf("@:%d:%d:%d:@\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1],runicast_received_msg.sender_data_value);
 
 		// send answer if needed
-		process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+		//process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
 	}
 	else if(runicast_received_msg.msg_type == 4){
 		process_post(&broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // if Runicast failed
@@ -233,7 +233,7 @@ PROCESS_THREAD(runicast_process, ev, data)
 		if(!runicast_is_transmitting(&runicast)) {
 			char real_message[64];
 			sprintf(real_message,"Runicast Open Valve for Node : %d.%d\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1]);
-			set_packet(&new_msg, 3, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, real_message);
+			set_packet(&new_msg, 3, rank, valve_addr, 1234, real_message);
 
 			int is_in_table = 0;
 			int i;
@@ -265,11 +265,12 @@ PROCESS_THREAD(test_serial, ev, data)
  {
    PROCESS_BEGIN();
  
-   for(;;) {
+   while(1) {
      PROCESS_YIELD();
      if(ev == serial_line_event_message) {
-		char* str = str_split(data,':');
-		printf("%s\n", (char *)data);
+		valve_addr[0] = (int) data;
+	        valve_addr[1] = 0;
+	        process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
      }
    }
    PROCESS_END();

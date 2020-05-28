@@ -6,23 +6,22 @@
 #include "cc2420.h" // signal strenght
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define MAX_RETRANSMISSIONS 3
 /*---------------------------------------------------------------------------*/
-PROCESS(broadcast_process, "Broadcast example");
-PROCESS(runicast_process, "runicast test");
-AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
+PROCESS(example_broadcast_process, "Broadcast example");
+PROCESS(test_runicast_process, "runicast test");
+AUTOSTART_PROCESSES(&example_broadcast_process,&test_runicast_process);
 /*---------------------------------------------------------------------------*/
 static int parent[2];
-static int rank = 999;
+static int rank = 999; 
+static int threshold = 1;
 static int parent_RSSI = -999;
 
-static int last_temp = 10;
 
 struct msg {
-  int msg_type; // sender msg type : 0 : node down ; 1 : discovery ; 2 : up (data) for runicast ; 3 : down (action to do) / 5 : down broadcast ; 4 up (data) for broadcast (if runicast timed out) ;
+  int sender_type; // sender msg type : 1 : discovery ; 2 : up (data) ; 3 : down (action to do)
   int sender_rank; // sender_rank
   int origin_addr[2]; // origin address
   int sender_data_value; // data value
@@ -30,34 +29,49 @@ struct msg {
 };
 
 struct route {
-  int TTL; // Time to live
-  int addr_to_find[2]; // Target addr
-  int next_node[2]; // next addr
+  int TTL;
+  int addr_to_find[2];
+  int next_node[2]; 
+  // bool taken = false;
 };
 
+struct data {
+  struct route *route;
+  int next_slot_data;
+  int full;
+  int data[30];
+};
+
+static struct data taken_list[5];
 static struct route route_table[64]; // static = init to 0 for all value
 static int route_table_len = sizeof(route_table)/sizeof(route_table[0]);
 
-static struct msg broadcast_received_msg;
-static struct msg runicast_received_msg;
+static int 
+least_squarred(struct data data) {
 
+	int sum_x = 0;
+	int sum_y = 0;
+	int sum_xx = 0;
+	int sum_xy = 0;
+	int n = 30;
 
-static int
-data_generate()
-{
-  int offset = (random_rand() % 6) - 3;
-  if (last_temp >= 30 ) {
-	offset = (random_rand() % 6) - 8;
-  }
-  if (last_temp <= -6 ) {
-	  offset = random_rand() % 8;
-  }
-  last_temp = last_temp + offset;
-   return last_temp;
+	int i;
+	for (i = 0 ; i < 30 ; i++){
+
+		int index = ( i + data.next_slot_data ) % 30;
+		sum_x = sum_x + i;
+		sum_xx = sum_xx + (i^2);
+		sum_y = sum_y + data.data[index];
+		sum_xy = sum_xy + i * data.data[index];
+
+	}
+
+	return (n*sum_xy - sum_x*sum_y)/(n*sum_xx - (sum_x^2));
+
 }
 
 static void
-add_to_routing_table(int node_addr[2], int next[2])
+add_to_routing_table(int node_addr[2], int next[2], int value)
 {
   static struct route new_route;
   new_route.TTL = 3;
@@ -65,6 +79,31 @@ add_to_routing_table(int node_addr[2], int next[2])
   new_route.addr_to_find[1] = node_addr[1];
   new_route.next_node[0] = next[0];
   new_route.next_node[1] = next[1];
+  
+  int n;
+  int yes = -1;
+  for (n = 0; n < 5; n++) {
+  
+    if ( taken_list[n].route  ) {
+        if ( (*taken_list[n].route).TTL == 0 ) {
+            yes = n;
+        }
+    } else {
+        yes = n;
+    }
+    
+  }
+
+  if (yes >= 0 ) {
+    static struct data new_data;
+    new_data.route = &new_route;
+    new_data.next_slot_data = 0;
+    new_data.data[new_data.next_slot_data] = value;
+    new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
+    taken_list[yes] = new_data;
+    
+  }
+
   int has_place = 0;
   int i;
   for (i = 0 ; i < route_table_len ; i++){
@@ -75,13 +114,14 @@ add_to_routing_table(int node_addr[2], int next[2])
 	}
   }
   if (has_place == 0){
-	printf("Warning : Route Table Full : Reset with new route as first element\n"); // should not happen
+	printf("Warning : Route Table Full : Reset with new route as first element\n");
 	route_table[0] = new_route;
 	for (i = 1 ; i < route_table_len ; i++){
 		route_table[i].TTL = 0;
   	}
   }
 }
+
 
 // set struct msg
 static void
@@ -91,7 +131,7 @@ set_packet(struct msg *new_msg, int type, int rank, int addr[2], int value, char
 	packetbuf_set_datalen(sizeof(struct msg));
 	new_msg = packetbuf_dataptr();
 	memset(new_msg, 0, sizeof(struct msg));
-	new_msg->msg_type = type;
+	new_msg->sender_type = type;
 	new_msg->sender_rank = rank;
 	new_msg->origin_addr[0] = addr[0];
 	new_msg->origin_addr[1] = addr[1];
@@ -101,7 +141,10 @@ set_packet(struct msg *new_msg, int type, int rank, int addr[2], int value, char
 		new_msg->sender_data[i] = msg[i] ;
 	}
 }
+//
 
+static struct msg broadcast_received_msg;
+static struct msg runicast_received_msg;
 /*---------------------------------------------------------------------------*/
 //	BROADCAST
 /*---------------------------------------------------------------------------*/
@@ -110,51 +153,50 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 {
   memcpy(&broadcast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
   printf("rank : %d broadcast message of type %d received from %d.%d: rank '%d'\n",
-         rank, broadcast_received_msg.msg_type, from->u8[0], from->u8[1], broadcast_received_msg.sender_rank);
+         rank, broadcast_received_msg.sender_type, from->u8[0], from->u8[1], broadcast_received_msg.sender_rank);
 
-  if( broadcast_received_msg.msg_type == 1 && broadcast_received_msg.sender_rank < rank ){
+  if( broadcast_received_msg.sender_type == 1 && broadcast_received_msg.sender_rank < rank ){
 	if( broadcast_received_msg.sender_rank < rank-1 ) {
 		parent[0] = from->u8[0];
   		parent[1] = from->u8[1];
 		parent_RSSI = cc2420_last_rssi;
 		rank = broadcast_received_msg.sender_rank + 1;
-		process_post(&broadcast_process, PROCESS_EVENT_MSG, "Go");
-		process_post(&runicast_process, PROCESS_EVENT_MSG, "Go2");	
+		process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Go");
+		process_post(&test_runicast_process, PROCESS_EVENT_MSG, "Go2");	
 	}
 	else if ( broadcast_received_msg.sender_rank == rank-1){
 		if ( (parent[0] != from->u8[0] || parent[1] != from->u8[1]) && parent_RSSI <= cc2420_last_rssi ){
 			parent[0] = from->u8[0];
 		  	parent[1] = from->u8[1];
 			parent_RSSI = cc2420_last_rssi;
-			process_post(&broadcast_process, PROCESS_EVENT_MSG, "Go");
-			process_post(&runicast_process, PROCESS_EVENT_MSG, "Go2");
+			process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Go");
+			process_post(&test_runicast_process, PROCESS_EVENT_MSG, "Go2");
 		}
 		else if (parent[0] == from->u8[0] && parent[1] == from->u8[1]){
-			process_post(&broadcast_process, PROCESS_EVENT_MSG, "Go");
+			process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Go");
 		}
 	}
   } 
-  else if ( broadcast_received_msg.msg_type == 0 && parent[0] == from->u8[0] && parent[1] == from->u8[1] ){
+  else if ( broadcast_received_msg.sender_type == 0 && parent[0] == from->u8[0] && parent[1] == from->u8[1] ){
 	  printf("Reset Rank/Parent/RSSI\n");
 	  rank = 999;
 	  parent[0] = 0;
 	  parent[1] = 0;
 	  parent_RSSI = -999;
-	  process_post(&broadcast_process, PROCESS_EVENT_MSG, "Out");
-	  process_post(&runicast_process, PROCESS_EVENT_MSG, "TimerOut");
+	  process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Out");
+	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "TimerOut");
 	  int i;
 	  for (i = 0 ; i < route_table_len ; i++){
 			route_table[i].TTL = 0;
 	  }
   }
-  else if ( broadcast_received_msg.msg_type == 5 && broadcast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && broadcast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
+  else if ( broadcast_received_msg.sender_type == 4 && broadcast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && broadcast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 	  // Open valve
 	  printf("Open Valve Here, data was : %d\n",broadcast_received_msg.sender_data_value);
-	  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
   }
-  else if ( broadcast_received_msg.msg_type == 5 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){
+  else if ( broadcast_received_msg.sender_type == 4 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){
 		printf("SEARCHING FOR %d.%d\n",broadcast_received_msg.origin_addr[0],broadcast_received_msg.origin_addr[1]);		
-		process_post(&broadcast_process, PROCESS_EVENT_MSG, "SeekNode");
+		process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "SeekNode");
   }
   
 }
@@ -169,43 +211,105 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 {
   	memcpy(&runicast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
   	printf("rank : %d runicast message of type %d received from %d.%d: rank '%d'\n",
-         rank, runicast_received_msg.msg_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
+         rank, runicast_received_msg.sender_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 
-	if ( runicast_received_msg.msg_type == 2 ){ // routing_table
+	if( runicast_received_msg.sender_type == 2 ){
+		printf("Got Data From %d.%d : value : %d!\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1],runicast_received_msg.sender_data_value);
 		int from_addr[2];
 		from_addr[0] = from->u8[0];
 		from_addr[1] = from->u8[1];
 		int is_in_table = 0;
 		int i;
+        int yes = -1;
+        int correct_route_addr = -1;
+        int pass = 1;
 		  for (i = 0 ; i < route_table_len ; i++){
 			if ( route_table[i].TTL != 0 && route_table[i].addr_to_find[0] == runicast_received_msg.origin_addr[0] && route_table[i].addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
+				
 				route_table[i].TTL = 3;
 				route_table[i].next_node[0] = from_addr[0];
 				route_table[i].next_node[1] = from_addr[1];
-				is_in_table = 1;
-				break;
-			}
-		  }
+
+                correct_route_addr = i;
+                int n;
+                for (n = 0; n < 5; n++) {
+                
+                    if ( (*taken_list[n].route).TTL == 0 ) {
+                        yes = n;
+                    }
+                    if ( (*taken_list[n].route).addr_to_find[0] == runicast_received_msg.origin_addr[0] && (*taken_list[n].route).addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
+                        if ( taken_list[n].next_slot_data == 29 ) {
+                            taken_list[n].full = 1;
+                        }
+                        
+                        yes = -2;
+                        taken_list[n].data[taken_list[n].next_slot_data] = runicast_received_msg.sender_data_value;
+                        taken_list[n].next_slot_data = (taken_list[n].next_slot_data +1) % 30;
+                        printf("ID %d ; is full %d; Next slot data  %d!\n", (*taken_list[n].route).addr_to_find[0], taken_list[n].full, taken_list[n].next_slot_data);
+                    }
+                }
+                is_in_table = 1;
+                break;
+            }
+          }
+
+        if ( yes == -1 ) {
+            printf("ID %d ; will not be in the list\n", route_table[i].addr_to_find[0]);
+        }
+          
+        if (yes >= 0 && correct_route_addr >= 0) {
+            
+            static struct data new_data;
+            new_data.route = &route_table[correct_route_addr];
+            new_data.next_slot_data = 0;
+            new_data.data[new_data.next_slot_data] = runicast_received_msg.sender_data_value;
+            new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
+            taken_list[yes] = new_data;
+            
+        }
+
 		if(is_in_table == 0){
-			add_to_routing_table(runicast_received_msg.origin_addr,from_addr);
+            printf("Is not in table\n");
+			add_to_routing_table(runicast_received_msg.origin_addr,from_addr, runicast_received_msg.sender_data_value);
 		}
-		process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUp");	
+		
+
+		//Computation
+        
+		int j;
+		for (j = 0 ; j < 5 ; j++){
+			if ( (*taken_list[j].route).TTL != 0 && (*taken_list[j].route).addr_to_find[0] == runicast_received_msg.origin_addr[0] && (*taken_list[j].route).addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
+				pass = 0; // the node is in the taken list, so we will not let the value pass to the root
+                if ( taken_list[j].full ) {
+                    int slope = least_squarred(taken_list[j]);
+                    printf("ID %d ; Least Squarred value %d!\n", (*taken_list[j].route).addr_to_find[0], slope);
+					if ( slope > threshold ) {
+						process_post(&test_runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+					}
+				}
+                //else
+			}
+            //else
+		}
+
+        if ( pass ) {
+            process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUp");	
+        }
+        
 	}
-	else if ( runicast_received_msg.msg_type == 3 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
+	else if ( runicast_received_msg.sender_type == 3 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 		  // Open valve
 		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
-		  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
 	}
-	else if ( runicast_received_msg.msg_type == 3 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
-		  process_post(&runicast_process, PROCESS_EVENT_MSG, "RunicastSeekNode");
+	else if ( runicast_received_msg.sender_type == 3 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
+		  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "RunicastSeekNode");
 	}
-	else if ( runicast_received_msg.msg_type == 4 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
+	else if ( runicast_received_msg.sender_type == 5 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 		  // Open valve
 		  printf("Open Valve Here, data was : %d\n",runicast_received_msg.sender_data_value);
-		  process_post(&runicast_process, PROCESS_EVENT_MSG, "StartLED");
 	}
-	else if ( runicast_received_msg.msg_type == 4 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
-		  process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+	else if ( runicast_received_msg.sender_type == 5 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
+		  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
 	}
 }
 static void
@@ -221,7 +325,7 @@ timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retrans
 	 to->u8[0], to->u8[1], retransmissions);
 
   if (to->u8[0] != parent[0] && to->u8[0] != parent[1]){
-	  process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
   }
   else {
 	  printf("Reset Rank/Parent/RSSI\n");
@@ -229,8 +333,8 @@ timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retrans
 	  parent[0] = 0;
 	  parent[1] = 0;
 	  parent_RSSI = -999;
-	  process_post(&broadcast_process, PROCESS_EVENT_MSG, "Out");
-	  process_post(&runicast_process, PROCESS_EVENT_MSG, "TimerOut");
+	  process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Out");
+	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "TimerOut");
 	  int i;
 	  for (i = 0 ; i < route_table_len ; i++){
 			route_table[i].TTL = 0;
@@ -244,7 +348,7 @@ static struct runicast_conn runicast;
 /*---------------------------------------------------------------------------*/
 //	PROCESSES
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(broadcast_process, ev, data)
+PROCESS_THREAD(example_broadcast_process, ev, data)
 {
   static struct etimer et;
 
@@ -294,7 +398,7 @@ PROCESS_THREAD(broadcast_process, ev, data)
 	    etimer_set(&et, CLOCK_SECOND * 2 + random_rand() % (CLOCK_SECOND * 8));
     	    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 	    
-	    set_packet(&new_msg, 5, rank, broadcast_received_msg.origin_addr, broadcast_received_msg.sender_data_value, broadcast_received_msg.sender_data);
+	    set_packet(&new_msg, 4, rank, broadcast_received_msg.origin_addr, broadcast_received_msg.sender_data_value, broadcast_received_msg.sender_data);
 
 	    broadcast_send(&broadcast);
 	}
@@ -303,17 +407,15 @@ PROCESS_THREAD(broadcast_process, ev, data)
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(runicast_process, ev, data)
+PROCESS_THREAD(test_runicast_process, ev, data)
 {
   PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
   PROCESS_BEGIN();
-  leds_off(LEDS_ALL);
 
   runicast_open(&runicast, 144, &runicast_callbacks);
   static struct etimer et1;
   static struct etimer et2;
-  static struct etimer et3; // LEDS
   static linkaddr_t recv;
   static struct msg new_msg;
 
@@ -342,7 +444,7 @@ PROCESS_THREAD(runicast_process, ev, data)
     else if (strcmp(data,"DataUpForBroadcast") == 0){ // runicast failed so ask root for general broadcast
 
 	if(!runicast_is_transmitting(&runicast)) {
-		set_packet(&new_msg, 4, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, runicast_received_msg.sender_data);
+		set_packet(&new_msg, 5, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, runicast_received_msg.sender_data);
 
 		recv.u8[0] = parent[0];
 		recv.u8[1] = parent[1];
@@ -368,17 +470,13 @@ PROCESS_THREAD(runicast_process, ev, data)
 		}
 		if(is_in_table == 0){
 			printf("Node disapeared ?\n"); // rip -> general broadcast
-			process_post(&broadcast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+			process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
 		}
 		else{
 			runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
 		}
 
 	}	
-    }
-    else if (strcmp(data,"StartLED") == 0){
-	leds_on(LEDS_GREEN);
-	etimer_set(&et3, CLOCK_SECOND * 600); // 10 minutes timer
     }
     else if (etimer_expired(&et2)){ // et2 first because et1 still expired
 
@@ -392,7 +490,8 @@ PROCESS_THREAD(runicast_process, ev, data)
 		etimer_set(&et2, CLOCK_SECOND * 60);
 		etimer_set(&et1, CLOCK_SECOND * 6000); // little tests from time to time (seems useless now but avoid et1 expirating for ever)
 	if(!runicast_is_transmitting(&runicast)) { // data up sending
-		char real_message[64];
+		/*
+        char real_message[64];
 		int new_value = (int) data_generate();
 		sprintf(real_message,"Data sent by %d.%d : %d\n",linkaddr_node_addr.u8[0],linkaddr_node_addr.u8[1],new_value);
 		set_packet(&new_msg, 2, rank, (int *) linkaddr_node_addr.u8, new_value, real_message);
@@ -402,12 +501,13 @@ PROCESS_THREAD(runicast_process, ev, data)
 		
 		printf("Sending Data For Computation !\n");
 		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
-		
+		*/
 	}
     }
     else if (etimer_expired(&et1)){ // runicast test when adding parent
 	if(!runicast_is_transmitting(&runicast)) {
-		char real_message[64];
+		/*
+        char real_message[64];
 		int new_value = (int) data_generate();
 		sprintf(real_message,"Type:%d,Rank:%d,Data: Hello Parent",1,rank);
 		set_packet(&new_msg, 1, rank,  (int *) linkaddr_node_addr.u8, new_value, real_message);
@@ -416,13 +516,11 @@ PROCESS_THREAD(runicast_process, ev, data)
 		recv.u8[1] = parent[1];
 		runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
 		etimer_set(&et2, CLOCK_SECOND * 60);
+        */
 	}
     }					// timers in last to avoid overwriting received packets
-    else if (etimer_expired(&et3)){ // Turn off LED after 10 min
-	leds_off(LEDS_GREEN);
-    }
   }
-  leds_off(LEDS_ALL);
+
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/

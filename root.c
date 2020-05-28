@@ -271,7 +271,7 @@ PROCESS_THREAD(test_serial, ev, data)
    for(;;) {
      PROCESS_YIELD();
      if(ev == serial_line_event_message) {
-		printf("received line: %s\n", (char *)data);
+		printf("%s\n", (char *)data);
      }
    }
    PROCESS_END();

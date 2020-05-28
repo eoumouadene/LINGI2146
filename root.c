@@ -268,6 +268,7 @@ PROCESS_THREAD(test_serial, ev, data)
    for(;;) {
      PROCESS_YIELD();
      if(ev == serial_line_event_message) {
+		char* str = str_split(data,':');
 		printf("%s\n", (char *)data);
      }
    }

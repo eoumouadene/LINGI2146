@@ -27,12 +27,7 @@ def leastSquare(yvalue,idnode):
 
     #//to find the a of y=ax+b
     a=(30*sumyx-sumx*sumy)/(30*sumx2-sumx*sumx)
-
-    if a >=30:
-        conn.sendall((str(idnode)+':'+"OpenValve"+'\n').encode())
-
-    else:
-        conn.sendall((str(idnode)+':'+"CloseValve"+'\n').encode())
+    conn.sendall((str(idnode)+':'+str(30)+':'+str(a)+'\n').encode())
 
 while(True):
 
@@ -76,8 +71,9 @@ while(True):
                         nbrdata [indexid] -=1 
                         memorydata[indexid].pop(0) #remove the oldest      
                         leastSquare(memorydata[indexid],int(dataTested[0]))#compute the value of leastsquare
+                    elif(nbrdata [indexid]==30):
+                        leastSquare(memorydata[indexid],int(dataTested[0]))#compute the value of leastsquare
                     else:
-                        conn.sendall(("Server received the "+str(nbrdata[indexid])+"/30 values from id "+str(int(dataTested[0]))+' \n').encode())                
-                           
+                        conn.sendall((str(int(dataTested[0]))+':'+str(nbrdata[indexid])+':-1'+'\n').encode())           
             else:
                 break

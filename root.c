@@ -11,8 +11,8 @@
 
 #define MAX_RETRANSMISSIONS 3
 /*---------------------------------------------------------------------------*/
-PROCESS(broadcast_process, "Broadcast example");
-PROCESS(runicast_process, "runicast test");
+PROCESS(broadcast_process, "broadcast");
+PROCESS(runicast_process, "runicast");
 PROCESS(test_serial, "Serial line test process");
 AUTOSTART_PROCESSES(&broadcast_process,&runicast_process,&test_serial);
 /*---------------------------------------------------------------------------*/
@@ -215,14 +215,12 @@ PROCESS_THREAD(runicast_process, ev, data)
   static struct etimer et2;
   linkaddr_t recv;
   struct msg new_msg;
-
+  etimer_set(&et2, CLOCK_SECOND * 60); // TTL --
+	
   while(1) {
 
     PROCESS_WAIT_EVENT();
-	if(strcmp(data,"Got Something") == 0){
-
-	}
-	else if (etimer_expired(&et2)){
+	if (etimer_expired(&et2)){
 		  int i;
 		  for (i = 0 ; i < route_table_len ; i++){
 			if(route_table[i].TTL > 0){
@@ -254,7 +252,6 @@ PROCESS_THREAD(runicast_process, ev, data)
 			else{
 				printf("rank %d: sending data runicast to address %u.%u\n",rank,recv.u8[0],recv.u8[1]);
 				runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
-				etimer_set(&et2, CLOCK_SECOND * 60); // TTL --
 			}
 		}
 	}

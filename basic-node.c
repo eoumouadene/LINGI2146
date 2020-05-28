@@ -11,8 +11,8 @@
 
 #define MAX_RETRANSMISSIONS 3
 /*---------------------------------------------------------------------------*/
-PROCESS(broadcast_process, "Broadcast example");
-PROCESS(runicast_process, "runicast test");
+PROCESS(broadcast_process, "broadcast");
+PROCESS(runicast_process, "runicast");
 AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
 /*---------------------------------------------------------------------------*/
 static int parent[2];

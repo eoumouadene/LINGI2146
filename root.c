@@ -9,15 +9,15 @@
 
 #define MAX_RETRANSMISSIONS 3
 /*---------------------------------------------------------------------------*/
-PROCESS(example_broadcast_process, "Broadcast example");
-PROCESS(test_runicast_process, "runicast test");
-AUTOSTART_PROCESSES(&example_broadcast_process,&test_runicast_process);
+PROCESS(broadcast_process, "Broadcast example");
+PROCESS(runicast_process, "runicast test");
+AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
 /*---------------------------------------------------------------------------*/
-static int parent[2];
+
 static int rank = 1;
 
 struct msg {
-  int sender_type; // sender msg type : 1 : discovery ; 2 : up (data) ; 3 : down (action to do)
+  int msg_type; // sender msg type : 1 : discovery ; 2 : up (data) ; 3 : down (action to do)
   int sender_rank; // sender_rank
   int origin_addr[2]; // origin address
   int sender_data_value; // data value
@@ -28,7 +28,6 @@ struct route {
   int TTL;
   int addr_to_find[2];
   int next_node[2];
-	//int data[30];
 };
 
 static struct route route_table[64]; // static = init to 0 for all value
@@ -69,7 +68,7 @@ set_packet(struct msg *new_msg, int type, int rank, int addr[2], int value, char
 	packetbuf_set_datalen(sizeof(struct msg));
 	new_msg = packetbuf_dataptr();
 	memset(new_msg, 0, sizeof(struct msg));
-	new_msg->sender_type = type;
+	new_msg->msg_type = type;
 	new_msg->sender_rank = rank;
 	new_msg->origin_addr[0] = addr[0];
 	new_msg->origin_addr[1] = addr[1];
@@ -91,7 +90,7 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 {
   memcpy(&broadcast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
   printf("rank : %d broadcast message of type %d received from %d.%d: rank '%d'\n",
-         rank, runicast_received_msg.sender_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
+         rank, runicast_received_msg.msg_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 }
 static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
 static struct broadcast_conn broadcast;
@@ -103,9 +102,9 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 {
   	memcpy(&runicast_received_msg, packetbuf_dataptr(), sizeof(struct msg));
   	printf("rank : %d runicast message of type %d received from %d.%d: rank '%d'\n",
-         rank, runicast_received_msg.sender_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
+         rank, runicast_received_msg.msg_type, from->u8[0], from->u8[1], runicast_received_msg.sender_rank);
 
-	if( runicast_received_msg.sender_type == 2 ){
+	if( runicast_received_msg.msg_type == 2 ){
 		printf("Got Data From %d.%d : value : %d!\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1],runicast_received_msg.sender_data_value);
 		int from_addr[2];
 		from_addr[0] = from->u8[0];
@@ -126,10 +125,10 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		}
 		// do calculation
 		// send answer if needed
-		process_post(&test_runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+		process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
 	}
-	else if(runicast_received_msg.sender_type == 5){
-		process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // if Runicast failed
+	else if(runicast_received_msg.msg_type == 4){
+		process_post(&broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // if Runicast failed
 	}	
 
 }
@@ -144,7 +143,7 @@ timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retrans
 {
   printf("runicast message timed out when sending to %d.%d, retransmissions %d\n",
 	 to->u8[0], to->u8[1], retransmissions);
-  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // only case where root time out for now (see with server what to do)
+  process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast"); // only case where root time out for now (see with server what to do)
 }
 static const struct runicast_callbacks runicast_callbacks = {recv_runicast,
 							     sent_runicast,
@@ -153,7 +152,7 @@ static struct runicast_conn runicast;
 /*---------------------------------------------------------------------------*/
 //	PROCESSES
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(example_broadcast_process, ev, data)
+PROCESS_THREAD(broadcast_process, ev, data)
 {
   static struct etimer et;
 
@@ -190,7 +189,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
 
 	    char real_message[64];
 	    sprintf(real_message,"Open Valve for Node : %d.%d\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1]);
-	    set_packet(&new_msg, 4, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, real_message);
+	    set_packet(&new_msg, 5, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, real_message);
 
 	    broadcast_send(&broadcast);
 	}
@@ -201,7 +200,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
 }
 /*---------------------------------------------------------------------------*/
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(test_runicast_process, ev, data)
+PROCESS_THREAD(runicast_process, ev, data)
 {
   PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
@@ -245,7 +244,7 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 			}
 			if(is_in_table == 0){
 				printf("Node disapeared ?????\n"); // rip
-				process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast");
+				process_post(&broadcast_process, PROCESS_EVENT_MSG, "OpenValveBroadcast");
 			}
 			else{
 				printf("rank %d: sending data runicast to address %u.%u\n",rank,recv.u8[0],recv.u8[1]);

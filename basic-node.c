@@ -21,7 +21,7 @@ static int rank = 999;
 static int parent_RSSI = -999;
 
 //new
-static int last_temp = 10
+static int last_temp = 10;
 
 struct msg {
   int sender_type; // sender msg type : 0 : node down ; 1 : discovery ; 2 : up (data) for runicast ; 3 : down (action to do) / 4 : down broadcast ; 5 up (data) for broadcast (if runicast timed out) ;
@@ -54,12 +54,12 @@ data_generate()
 static int
 data_generate()
 {
-  int offset = (random_rand() % 5) - 2;
+  int offset = (random_rand() % 6) - 3;
   if (last_temp >= 30 ) {
-	offset = (random_rand() % 5) - 4;
+	offset = (random_rand() % 6) - 8;
   }
   if (last_temp <= -6 ) {
-	  offset = random_rand() % 5;
+	  offset = random_rand() % 8;
   }
   last_temp = last_temp + offset;
   return last_temp;

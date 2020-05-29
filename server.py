@@ -25,7 +25,7 @@ def leastSquare(yvalue,idnode):
     #//to find the a of y=ax+b
     a=(30*sumyx-sumx*sumy)/(30*sumx2-sumx*sumx)
     
-    if a>1: 
+    if a>-10: 
         conn.sendall((str(idnode)+'\n').encode())#when threshold is reached, open valve with id=idnode
 
 while(True):
@@ -69,7 +69,7 @@ while(True):
                         memorydata[indexid].pop(0) #remove the oldest      
                         leastSquare(memorydata[indexid],int(dataTested[0]))#compute the value of leastsquare
                     if (nbrdata [indexid]==30):
-                        print("Node" +int(dataTested[0])+"."+int(dataTested[1])+"in Computation Node has 30 values!\n")
+                        print("Node " +dataTested[0]+"."+dataTested[1]+" in Server has 30 values!\n")
                         leastSquare(memorydata[indexid],int(dataTested[0]))#compute the value of leastsquare            
                  
             else:

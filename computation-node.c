@@ -83,15 +83,16 @@ add_to_routing_table(int node_addr[2], int next[2], int value)
   int n;
   int yes = -1;
   for (n = 0; n < 5; n++) {
-  
-    if ( taken_list[n].route  ) {
-        if ( (*taken_list[n].route).TTL == 0 ) {
-            yes = n;
-        }
-    } else {
-        yes = n;
+    if (taken_list[n].route != NULL) {
+	    if ( (*taken_list[n].route).TTL == 0 ) {
+		    yes = n;
+		    break;
+	    }
     }
-    
+    else {
+	yes = n;
+	break;
+    }
   }
 
   if (yes >= 0 ) {
@@ -220,74 +221,82 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		from_addr[1] = from->u8[1];
 		int is_in_table = 0;
 		int i;
-        int yes = -1;
-        int correct_route_addr = -1;
-        int pass = 1;
-	for (i = 0 ; i < route_table_len ; i++){
-	  if ( route_table[i].TTL != 0 && route_table[i].addr_to_find[0] == runicast_received_msg.origin_addr[0] && route_table[i].addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
-		route_table[i].TTL = 3;
-		route_table[i].next_node[0] = from_addr[0];
-		route_table[i].next_node[1] = from_addr[1];
-                correct_route_addr = i;
-                int n;
-                for (n = 0; n < 5; n++) {
-                
-                    if ( (*taken_list[n].route).TTL == 0 ) {
-                        yes = n;
-                    }
-                    if ( (*taken_list[n].route).addr_to_find[0] == runicast_received_msg.origin_addr[0] && (*taken_list[n].route).addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
-                        if ( taken_list[n].next_slot_data == 29 ) {
-                            taken_list[n].full = 1;
-                        }
-                        
-                        yes = -2;
-                        taken_list[n].data[taken_list[n].next_slot_data] = runicast_received_msg.sender_data_value;
-                        taken_list[n].next_slot_data = (taken_list[n].next_slot_data +1) % 30;
-			if(taken_list[n].full){
-                        	printf("Node %d.%d in Computation Node has 30 values!\n", (*taken_list[n].route).addr_to_find[0],(*taken_list[n].route).addr_to_find[1]);
-			}
-                    }
-                }
-                is_in_table = 1;
-                break;
-            }
-          }
-          
-        if (yes >= 0 && correct_route_addr >= 0) {
-            
-            static struct data new_data;
-            new_data.route = &route_table[correct_route_addr];
-            new_data.next_slot_data = 0;
-            new_data.data[new_data.next_slot_data] = runicast_received_msg.sender_data_value;
-            new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
-            taken_list[yes] = new_data;
-            
-        }
+		int yes = -1;
+		int correct_route_addr = -1;
+		int pass = 1;
+		int is_in_taken_list = 0;
+		for (i = 0 ; i < route_table_len ; i++){
+		  if ( route_table[i].TTL != 0 && route_table[i].addr_to_find[0] == runicast_received_msg.origin_addr[0] && route_table[i].addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
+			route_table[i].TTL = 3;
+			route_table[i].next_node[0] = from_addr[0];
+			route_table[i].next_node[1] = from_addr[1];
+		        correct_route_addr = i;
+		        int n;
+		        for (n = 0; n < 5; n++) {
+			    if (taken_list[n].route != NULL) {
+				    if ( (*taken_list[n].route).TTL == 0 ) {
+					    yes = n;
+				    }
+			    }
+			    else {
+				yes = n;
+			    }
 
-	if(is_in_table == 0){
-		add_to_routing_table(runicast_received_msg.origin_addr,from_addr, runicast_received_msg.sender_data_value);
-	}
+		            if ( (*taken_list[n].route).addr_to_find[0] == runicast_received_msg.origin_addr[0] && (*taken_list[n].route).addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
+		                if ( taken_list[n].next_slot_data == 29 ) {
+		                    taken_list[n].full = 1;
+		                }
+		                
+		                yes = -2;
+		                taken_list[n].data[taken_list[n].next_slot_data] = runicast_received_msg.sender_data_value;
+		                taken_list[n].next_slot_data = (taken_list[n].next_slot_data +1) % 30;
+				if(taken_list[n].full){
+		                	printf("Node %d.%d in Computation Node has 30 values!\n", (*taken_list[n].route).addr_to_find[0],(*taken_list[n].route).addr_to_find[1]);
+				}
+				is_in_taken_list = 1;
+				break;
+		            }
+		        }
+			is_in_table = 1;
+		        break;
+		    }
+		  }
+		  
+		if (yes >= 0 && correct_route_addr >= 0 && is_in_taken_list == 0) {
+		    
+		    static struct data new_data;
+		    new_data.route = &route_table[correct_route_addr];
+		    new_data.next_slot_data = 0;
+		    new_data.data[new_data.next_slot_data] = runicast_received_msg.sender_data_value;
+		    new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
+		    taken_list[yes] = new_data;
+		    
+		}
+
+		if(is_in_table == 0){
+			add_to_routing_table(runicast_received_msg.origin_addr,from_addr, runicast_received_msg.sender_data_value);
+		}
 	
-	//Computation
-	int j;
-	for (j = 0 ; j < 5 ; j++){
-		if ( (*taken_list[j].route).TTL != 0 && (*taken_list[j].route).addr_to_find[0] == runicast_received_msg.origin_addr[0] && (*taken_list[j].route).addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
-			pass = 0; // the node is in the taken list, so we will not let the value pass to the root
-        		if ( taken_list[j].full ) {
-            		int slope = least_squarred(taken_list[j]);
-				if ( slope > threshold ) {
-					printf("GOT HERE %d\n",slope);
-					valve_addr[0] = (*taken_list[j].route).addr_to_find[0]; //the valve to open
-					valve_addr[1] = (*taken_list[j].route).addr_to_find[1];
-					process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+		//Computation
+		int j;
+		for (j = 0 ; j < 5 ; j++){
+			if ( (*taken_list[j].route).TTL != 0 && (*taken_list[j].route).addr_to_find[0] == runicast_received_msg.origin_addr[0] && (*taken_list[j].route).addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
+				pass = 0; // the node is in the taken list, so we will not let the value pass to the root
+				if ( taken_list[j].full ) {
+		    		int slope = least_squarred(taken_list[j]);
+					if ( slope > threshold ) {
+						printf("GOT HERE %d\n",slope);
+						valve_addr[0] = (*taken_list[j].route).addr_to_find[0]; //the valve to open
+						valve_addr[1] = (*taken_list[j].route).addr_to_find[1];
+						process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+					}
 				}
 			}
 		}
-	}
 
-        if ( pass ) {
-            process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUp");	
-        }
+		if ( pass ) {
+		    process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUp");	
+		}
         
 	}
 	else if ( runicast_received_msg.sender_type == 3 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){

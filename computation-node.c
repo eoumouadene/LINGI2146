@@ -10,15 +10,15 @@
 
 #define MAX_RETRANSMISSIONS 3
 /*---------------------------------------------------------------------------*/
-PROCESS(example_broadcast_process, "broadcast");
-PROCESS(test_runicast_process, "runicast");
-AUTOSTART_PROCESSES(&example_broadcast_process,&test_runicast_process);
+PROCESS(broadcast_process, "broadcast");
+PROCESS(runicast_process, "runicast");
+AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
 /*---------------------------------------------------------------------------*/
 static int parent[2];
 static int rank = 999; 
-static int threshold = 1;
+static int threshold = -10;
 static int parent_RSSI = -999;
-
+static int valve_addr[2];
 
 struct msg {
   int sender_type; // sender msg type : 1 : discovery ; 2 : up (data) ; 3 : down (action to do)
@@ -162,19 +162,19 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
   		parent[1] = from->u8[1];
 		parent_RSSI = cc2420_last_rssi;
 		rank = broadcast_received_msg.sender_rank + 1;
-		process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Go");
-		process_post(&test_runicast_process, PROCESS_EVENT_MSG, "Go2");	
+		process_post(&broadcast_process, PROCESS_EVENT_MSG, "Go");
+		process_post(&runicast_process, PROCESS_EVENT_MSG, "Go2");	
 	}
 	else if ( broadcast_received_msg.sender_rank == rank-1){
 		if ( (parent[0] != from->u8[0] || parent[1] != from->u8[1]) && parent_RSSI <= cc2420_last_rssi ){
 			parent[0] = from->u8[0];
 		  	parent[1] = from->u8[1];
 			parent_RSSI = cc2420_last_rssi;
-			process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Go");
-			process_post(&test_runicast_process, PROCESS_EVENT_MSG, "Go2");
+			process_post(&broadcast_process, PROCESS_EVENT_MSG, "Go");
+			process_post(&runicast_process, PROCESS_EVENT_MSG, "Go2");
 		}
 		else if (parent[0] == from->u8[0] && parent[1] == from->u8[1]){
-			process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Go");
+			process_post(&broadcast_process, PROCESS_EVENT_MSG, "Go");
 		}
 	}
   } 
@@ -184,19 +184,19 @@ broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 	  parent[0] = 0;
 	  parent[1] = 0;
 	  parent_RSSI = -999;
-	  process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Out");
-	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "TimerOut");
+	  process_post(&broadcast_process, PROCESS_EVENT_MSG, "Out");
+	  process_post(&runicast_process, PROCESS_EVENT_MSG, "TimerOut");
 	  int i;
 	  for (i = 0 ; i < route_table_len ; i++){
 			route_table[i].TTL = 0;
 	  }
   }
-  else if ( broadcast_received_msg.sender_type == 4 && broadcast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && broadcast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
+  else if ( broadcast_received_msg.sender_type == 5 && broadcast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && broadcast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 	  // Open valve
 	  printf("Error No Valve To Open Here\n");
   }
-  else if ( broadcast_received_msg.sender_type == 4 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){		
-		process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "SeekNode");
+  else if ( broadcast_received_msg.sender_type == 5 && parent[0] == from->u8[0] && parent[1] == from->u8[1] && (broadcast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || broadcast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1]) ){		
+		process_post(&broadcast_process, PROCESS_EVENT_MSG, "SeekNode");
   }
   
 }
@@ -276,14 +276,17 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
         		if ( taken_list[j].full ) {
             		int slope = least_squarred(taken_list[j]);
 				if ( slope > threshold ) {
-					process_post(&test_runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+					printf("GOT HERE %d\n",slope);
+					valve_addr[0] = (*taken_list[j].route).addr_to_find[0]; //the valve to open
+					valve_addr[1] = (*taken_list[j].route).addr_to_find[1];
+					process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
 				}
 			}
 		}
 	}
 
         if ( pass ) {
-            process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUp");	
+            process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUp");	
         }
         
 	}
@@ -292,14 +295,14 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		  printf("Error No Valve To Open Here\n");
 	}
 	else if ( runicast_received_msg.sender_type == 3 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
-		  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "RunicastSeekNode");
+		  process_post(&runicast_process, PROCESS_EVENT_MSG, "RunicastSeekNode");
 	}
-	else if ( runicast_received_msg.sender_type == 5 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
+	else if ( runicast_received_msg.sender_type == 4 && runicast_received_msg.origin_addr[0] == linkaddr_node_addr.u8[0] && runicast_received_msg.origin_addr[1] == linkaddr_node_addr.u8[1] ){
 		  // Open valve
 		  printf("Error No Valve To Open Here\n");
 	}
-	else if ( runicast_received_msg.sender_type == 5 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
-		  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+	else if ( runicast_received_msg.sender_type == 4 && (runicast_received_msg.origin_addr[0] != linkaddr_node_addr.u8[0] || runicast_received_msg.origin_addr[1] != linkaddr_node_addr.u8[1])){
+		  process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
 	}
 }
 static void
@@ -314,7 +317,7 @@ timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retrans
 	 to->u8[0], to->u8[1], retransmissions);
 
   if (to->u8[0] != parent[0] && to->u8[0] != parent[1]){
-	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+	  process_post(&runicast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
   }
   else {
 	  printf("Reset Rank/Parent/RSSI\n");
@@ -322,8 +325,8 @@ timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retrans
 	  parent[0] = 0;
 	  parent[1] = 0;
 	  parent_RSSI = -999;
-	  process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "Out");
-	  process_post(&test_runicast_process, PROCESS_EVENT_MSG, "TimerOut");
+	  process_post(&broadcast_process, PROCESS_EVENT_MSG, "Out");
+	  process_post(&runicast_process, PROCESS_EVENT_MSG, "TimerOut");
 	  int i;
 	  for (i = 0 ; i < route_table_len ; i++){
 			route_table[i].TTL = 0;
@@ -337,7 +340,7 @@ static struct runicast_conn runicast;
 /*---------------------------------------------------------------------------*/
 //	PROCESSES
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(example_broadcast_process, ev, data)
+PROCESS_THREAD(broadcast_process, ev, data)
 {
   static struct etimer et;
 
@@ -385,7 +388,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
 	    etimer_set(&et, CLOCK_SECOND * 2 + random_rand() % (CLOCK_SECOND * 8));
     	    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 	    
-	    set_packet(&new_msg, 4, rank, broadcast_received_msg.origin_addr, broadcast_received_msg.sender_data_value, broadcast_received_msg.sender_data);
+	    set_packet(&new_msg, 5, rank, broadcast_received_msg.origin_addr, broadcast_received_msg.sender_data_value, broadcast_received_msg.sender_data);
 
 	    broadcast_send(&broadcast);
 	}
@@ -394,7 +397,7 @@ PROCESS_THREAD(example_broadcast_process, ev, data)
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(test_runicast_process, ev, data)
+PROCESS_THREAD(runicast_process, ev, data)
 {
   PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
@@ -431,7 +434,7 @@ PROCESS_THREAD(test_runicast_process, ev, data)
     else if (strcmp(data,"DataUpForBroadcast") == 0){ // runicast failed so ask root for general broadcast
 
 	if(!runicast_is_transmitting(&runicast)) {
-		set_packet(&new_msg, 5, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, runicast_received_msg.sender_data);
+		set_packet(&new_msg, 4, rank, runicast_received_msg.origin_addr, runicast_received_msg.sender_data_value, runicast_received_msg.sender_data);
 
 		recv.u8[0] = parent[0];
 		recv.u8[1] = parent[1];
@@ -457,13 +460,38 @@ PROCESS_THREAD(test_runicast_process, ev, data)
 		}
 		if(is_in_table == 0){
 			printf("Node disapeared ?\n"); // rip -> general broadcast
-			process_post(&example_broadcast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+			process_post(&broadcast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
 		}
 		else{
 			runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
 		}
 
 	}	
+    }
+    else if (strcmp(data,"OpenValveRunicast") == 0){
+		if(!runicast_is_transmitting(&runicast)) {
+			char real_message[64];
+			sprintf(real_message,"Runicast Open Valve for Node : %d.%d\n",runicast_received_msg.origin_addr[0],runicast_received_msg.origin_addr[1]);
+			set_packet(&new_msg, 3, rank, valve_addr, 1234, real_message);
+
+			int is_in_table = 0;
+			int i;
+			for (i = 0 ; i < route_table_len ; i++){
+				if ( route_table[i].TTL != 0 && route_table[i].addr_to_find[0] == runicast_received_msg.origin_addr[0] && route_table[i].addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
+					recv.u8[0] = route_table[i].next_node[0];
+					recv.u8[1] = route_table[i].next_node[1];
+					is_in_table = 1;
+					break;
+				}
+			}
+			if(is_in_table == 0){
+				printf("Node disapeared ?????\n"); // rip
+				process_post(&broadcast_process, PROCESS_EVENT_MSG, "DataUpForBroadcast");
+			}
+			else{
+				runicast_send(&runicast, &recv, MAX_RETRANSMISSIONS);
+			}
+		}
     }
     else if (etimer_expired(&et2)){ // et2 first because et1 still expired
 

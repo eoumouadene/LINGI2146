@@ -25,7 +25,7 @@ def leastSquare(yvalue,idnode):
     #//to find the a of y=ax+b
     a=(30*sumyx-sumx*sumy)/(30*sumx2-sumx*sumx)
     
-    if a>=-5: 
+    if a>1: 
         conn.sendall((str(idnode)+'\n').encode())#when threshold is reached, open valve with id=idnode
 
 while(True):

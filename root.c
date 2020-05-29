@@ -268,11 +268,10 @@ PROCESS_THREAD(test_serial, ev, data)
    while(1) {
      PROCESS_YIELD();
      if(ev == serial_line_event_message) {
-		printf('\n');
-		printf(((int *)data)[0]);
-		valve_addr[0] = 2;
-	        valve_addr[1] = 0;
-	        process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+		 
+		valve_addr[0] = atoi(data); //the valve to open
+		valve_addr[1] = 0;
+		process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
      }
    }
    PROCESS_END();

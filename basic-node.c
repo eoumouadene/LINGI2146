@@ -45,12 +45,12 @@ static struct msg runicast_received_msg;
 static int
 data_generate()
 {
-  int offset = (random_rand() % 6) - 3;
+  int offset = (random_rand() % 7) - 3;
   if (last_temp >= 30 ) {
-	offset = (random_rand() % 6) - 8;
+	offset = (random_rand() % 7) - 6;
   }
   if (last_temp <= -6 ) {
-	  offset = random_rand() % 8;
+	  offset = (random_rand() % 7);
   }
   last_temp = last_temp + offset;
    return last_temp;

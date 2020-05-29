@@ -68,8 +68,9 @@ while(True):
                         nbrdata [indexid] -=1
                         memorydata[indexid].pop(0) #remove the oldest      
                         leastSquare(memorydata[indexid],int(dataTested[0]))#compute the value of leastsquare
-                    elif(nbrdata [indexid]==30):
-                        leastSquare(memorydata[indexid],int(dataTested[0]))#compute the value of leastsquare               
+                    if (nbrdata [indexid]==30):
+                        print("Node" +int(dataTested[0])+"."+int(dataTested[1])+"in Computation Node has 30 values!\n")
+                        leastSquare(memorydata[indexid],int(dataTested[0]))#compute the value of leastsquare            
                  
             else:
                 break

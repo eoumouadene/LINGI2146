@@ -3,7 +3,7 @@
 #include "random.h"
 #include "dev/button-sensor.h"
 #include "dev/leds.h"
-#include "cc2420.h" // signal strenght
+#include "cc2420.h" // signal strength
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -244,9 +244,10 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
                         yes = -2;
                         taken_list[n].data[taken_list[n].next_slot_data] = runicast_received_msg.sender_data_value;
                         taken_list[n].next_slot_data = (taken_list[n].next_slot_data +1) % 30;
-			if(taken_list[n].full){
+						if(taken_list[n].full){
                         	printf("Node %d.%d in Computation Node has 30 values!\n", (*taken_list[n].route).addr_to_find[0],(*taken_list[n].route).addr_to_find[1]);
-			}
+						}
+						break;
                     }
                 }
                 is_in_table = 1;

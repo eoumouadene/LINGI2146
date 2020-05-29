@@ -97,7 +97,6 @@ add_to_routing_table(int node_addr[2], int next[2], int value)
   if (yes >= 0 ) {
     static struct data new_data;
     new_data.route = &new_route;
-	new_data.full = 0;
     new_data.next_slot_data = 0;
     new_data.data[new_data.next_slot_data] = value;
     new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
@@ -244,10 +243,9 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
                         yes = -2;
                         taken_list[n].data[taken_list[n].next_slot_data] = runicast_received_msg.sender_data_value;
                         taken_list[n].next_slot_data = (taken_list[n].next_slot_data +1) % 30;
-						if(taken_list[n].full){
+			if(taken_list[n].full){
                         	printf("Node %d.%d in Computation Node has 30 values!\n", (*taken_list[n].route).addr_to_find[0],(*taken_list[n].route).addr_to_find[1]);
-						}
-						break;
+			}
                     }
                 }
                 is_in_table = 1;
@@ -260,7 +258,6 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
             static struct data new_data;
             new_data.route = &route_table[correct_route_addr];
             new_data.next_slot_data = 0;
-			new_data.full = 0;
             new_data.data[new_data.next_slot_data] = runicast_received_msg.sender_data_value;
             new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
             taken_list[yes] = new_data;

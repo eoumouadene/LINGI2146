@@ -16,7 +16,7 @@ AUTOSTART_PROCESSES(&broadcast_process,&runicast_process);
 /*---------------------------------------------------------------------------*/
 static int parent[2];
 static int rank = 999; 
-static int threshold = -10;
+static int threshold = 1;
 static int parent_RSSI = -999;
 static int valve_addr[2];
 

@@ -74,6 +74,7 @@ static void
 add_to_routing_table(int node_addr[2], int next[2], int value)
 {
   static struct route new_route;
+  
   new_route.TTL = 3;
   new_route.addr_to_find[0] = node_addr[0];
   new_route.addr_to_find[1] = node_addr[1];
@@ -95,22 +96,21 @@ add_to_routing_table(int node_addr[2], int next[2], int value)
     }
   }
 
-  if (yes >= 0 ) {
-    static struct data new_data;
-    new_data.route = &new_route;
-    new_data.next_slot_data = 0;
-    new_data.data[new_data.next_slot_data] = value;
-    new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
-    taken_list[yes] = new_data;
-    
-  }
-
   int has_place = 0;
   int i;
   for (i = 0 ; i < route_table_len ; i++){
-	if ( route_table[i].TTL == 0 ) {
+	if ( route_table[i].TTL == 0 && &route_table[i] != taken_list[0].route && &route_table[i] != taken_list[1].route && &route_table[i] != taken_list[2].route && &route_table[i] != taken_list[3].route && &route_table[i] != taken_list[4].route) { // avoid rewritting wrong addresses (Need Routing Table Length > Taken List Length)
+
 		route_table[i] = new_route;
 		has_place = 1;
+
+		if ( yes >= 0 ) {
+		    taken_list[yes].route = &route_table[i];
+		    taken_list[yes].next_slot_data = 0;
+		    taken_list[yes].full = 0;
+		    taken_list[yes].data[0] = value;
+		    taken_list[yes].next_slot_data = 1;  
+  		}
 		break;
 	}
   }
@@ -261,34 +261,32 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		        break;
 		    }
 		  }
-		  
-		if (yes >= 0 && correct_route_addr >= 0 && is_in_taken_list == 0) {
-		    
-		    static struct data new_data;
-		    new_data.route = &route_table[correct_route_addr];
-		    new_data.next_slot_data = 0;
-		    new_data.data[new_data.next_slot_data] = runicast_received_msg.sender_data_value;
-		    new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
-		    taken_list[yes] = new_data;
+		if (yes >= 0 && correct_route_addr >= 0 && is_in_taken_list == 0 && is_in_table == 1) {
+		    taken_list[yes].route = &route_table[correct_route_addr];
+		    taken_list[yes].next_slot_data = 0;
+		    taken_list[yes].full = 0;
+		    taken_list[yes].data[taken_list[yes].next_slot_data] = runicast_received_msg.sender_data_value;
+		    taken_list[yes].next_slot_data = (taken_list[yes].next_slot_data + 1) % 30;
 		    
 		}
-
 		if(is_in_table == 0){
 			add_to_routing_table(runicast_received_msg.origin_addr,from_addr, runicast_received_msg.sender_data_value);
 		}
-	
+
 		//Computation
-		int j;
-		for (j = 0 ; j < 5 ; j++){
-			if ( (*taken_list[j].route).TTL != 0 && (*taken_list[j].route).addr_to_find[0] == runicast_received_msg.origin_addr[0] && (*taken_list[j].route).addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
-				pass = 0; // the node is in the taken list, so we will not let the value pass to the root
-				if ( taken_list[j].full ) {
-		    		int slope = least_squarred(taken_list[j]);
-					if ( slope > threshold ) {
-						printf("GOT HERE %d\n",slope);
-						valve_addr[0] = (*taken_list[j].route).addr_to_find[0]; //the valve to open
-						valve_addr[1] = (*taken_list[j].route).addr_to_find[1];
-						process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+		if (is_in_taken_list == 1){
+			int j;
+			for (j = 0 ; j < 5 ; j++){
+				if ( (*taken_list[j].route).TTL != 0 && (*taken_list[j].route).addr_to_find[0] == runicast_received_msg.origin_addr[0] && (*taken_list[j].route).addr_to_find[1] == runicast_received_msg.origin_addr[1]) {
+					pass = 0; // the node is in the taken list, so we will not let the value pass to the root
+					if ( taken_list[j].full ) {
+			    		int slope = least_squarred(taken_list[j]);
+						if ( slope > threshold ) {
+							printf("In Computation Node : Node %d Node %d Node %d Node %d Node %d\n",(*taken_list[0].route).addr_to_find[0],(*taken_list[1].route).addr_to_find[0],(*taken_list[2].route).addr_to_find[0],(*taken_list[3].route).addr_to_find[0],(*taken_list[4].route).addr_to_find[0]);
+							valve_addr[0] = (*taken_list[j].route).addr_to_find[0]; //the valve to open
+							valve_addr[1] = (*taken_list[j].route).addr_to_find[1];
+							process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
+						}
 					}
 				}
 			}

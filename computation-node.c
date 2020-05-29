@@ -16,7 +16,7 @@ AUTOSTART_PROCESSES(&example_broadcast_process,&test_runicast_process);
 /*---------------------------------------------------------------------------*/
 static int parent[2];
 static int rank = 999; 
-static int threshold = 1;
+static int threshold = -10;
 static int parent_RSSI = -999;
 
 
@@ -97,6 +97,7 @@ add_to_routing_table(int node_addr[2], int next[2], int value)
   if (yes >= 0 ) {
     static struct data new_data;
     new_data.route = &new_route;
+	new_data.full = 0;
     new_data.next_slot_data = 0;
     new_data.data[new_data.next_slot_data] = value;
     new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
@@ -258,6 +259,7 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
             static struct data new_data;
             new_data.route = &route_table[correct_route_addr];
             new_data.next_slot_data = 0;
+			new_data.full = 0;
             new_data.data[new_data.next_slot_data] = runicast_received_msg.sender_data_value;
             new_data.next_slot_data = (new_data.next_slot_data + 1) % 30;
             taken_list[yes] = new_data;

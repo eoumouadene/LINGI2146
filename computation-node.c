@@ -32,7 +32,6 @@ struct route {
   int TTL;
   int addr_to_find[2];
   int next_node[2]; 
-  // bool taken = false;
 };
 
 struct data {
@@ -116,11 +115,6 @@ add_to_routing_table(int node_addr[2], int next[2], int value)
   }
   if (has_place == 0){
 	printf("Error : Routing Table Full ! (Add more computation nodes or extend routing table size)\n"); // should not happen
-	/*printf("Warning : Route Table Full : Reset with new route as first element\n"); // should not happen
-	route_table[0] = new_route;
-	for (i = 1 ; i < route_table_len ; i++){
-		route_table[i].TTL = 0;
-  	}*/
   }
 }
 
@@ -143,7 +137,6 @@ set_packet(struct msg *new_msg, int type, int rank, int addr[2], int value, char
 		new_msg->sender_data[i] = msg[i] ;
 	}
 }
-//
 
 static struct msg broadcast_received_msg;
 static struct msg runicast_received_msg;
@@ -250,9 +243,7 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 		                yes = -2;
 		                taken_list[n].data[taken_list[n].next_slot_data] = runicast_received_msg.sender_data_value;
 		                taken_list[n].next_slot_data = (taken_list[n].next_slot_data +1) % 30;
-				if(taken_list[n].full){
-		                	printf("Node %d.%d in Computation Node has 30 values!\n", (*taken_list[n].route).addr_to_find[0],(*taken_list[n].route).addr_to_find[1]);
-				}
+				    
 				is_in_taken_list = 1;
 				break;
 		            }
@@ -282,7 +273,6 @@ recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 					if ( taken_list[j].full ) {
 			    		int slope = least_squarred(taken_list[j]);
 						if ( slope > threshold ) {
-							printf("In Computation Node : Node %d Node %d Node %d Node %d Node %d\n",(*taken_list[0].route).addr_to_find[0],(*taken_list[1].route).addr_to_find[0],(*taken_list[2].route).addr_to_find[0],(*taken_list[3].route).addr_to_find[0],(*taken_list[4].route).addr_to_find[0]);
 							valve_addr[0] = (*taken_list[j].route).addr_to_find[0]; //the valve to open
 							valve_addr[1] = (*taken_list[j].route).addr_to_find[1];
 							process_post(&runicast_process, PROCESS_EVENT_MSG, "OpenValveRunicast");
